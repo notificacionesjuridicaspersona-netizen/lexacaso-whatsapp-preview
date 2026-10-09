@@ -14,9 +14,7 @@ export async function extraerTextoDeArchivo(file: File): Promise<string> {
 
     if (!textoLimpio || textoLimpio.length < 30) {
       console.log('Documento escaneado detectado. Iniciando OCR automático con Tesseract...');
-      const result = await Tesseract.recognize(file, 'spa', {
-        logger: (m) => console.log(`[OCR] ${m.status}: ${Math.round((m.progress || 0) * 100)}%`)
-      });
+      const result = await Tesseract.recognize(file, 'spa');
       texto = result.data.text;
     }
 
@@ -243,186 +241,35 @@ export async function searchExpedientes(params: SearchParams): Promise<{
 }
 
 // ============================================
-// EXPORT TO DOCX & XLSX
+// EXPORTING HELPERS
 // ============================================
 
 export async function exportExpedienteToDocx(
   expediente: Expediente & { profiles?: Profile },
-  options: {
-    incluirDocumentos: boolean;
-    incluirSeguimientos: boolean;
-    incluirObservaciones: boolean;
-    incluirHistorial: boolean;
-    incluirAnalisis?: boolean;
-  }
+  options: { incluirDocumentos: boolean; incluirSeguimientos: boolean }
 ): Promise<void> {
-  const zip = new JSZip();
-  const sections: string[] = [];
-
-  sections.push(`<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>EXPEDIENTE: ${escapeXml(expediente.titulo)}</w:t></w:r></w:p>`);
-
-  if (expediente.profiles) {
-    const p = expediente.profiles;
-    sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>DATOS DEL CLIENTE</w:t></w:r></w:p>`);
-    sections.push(makeParagraph(`Nombre: ${p.nombre_completo}`));
-    sections.push(makeParagraph(`Email: ${p.email}`));
-    if (p.cedula) sections.push(makeParagraph(`Cédula: ${p.cedula}`));
-    if (p.celular) sections.push(makeParagraph(`Celular: ${p.celular}`));
-    if (p.direccion) sections.push(makeParagraph(`Dirección: ${p.direccion}`));
-  }
-
-  sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>INFORMACIÓN DEL EXPEDIENTE</w:t></w:r></w:p>`);
-  if (expediente.numero_expediente) sections.push(makeParagraph(`Número de expediente: ${expediente.numero_expediente}`));
-  if (expediente.numero_radicado) sections.push(makeParagraph(`Número de radicado: ${expediente.numero_radicado}`));
-  sections.push(makeParagraph(`Estado: ${expediente.estado}`));
-  sections.push(makeParagraph(`Prioridad: ${expediente.prioridad}`));
-  if (expediente.area_juridica) sections.push(makeParagraph(`Área jurídica: ${expediente.area_juridica}`));
-  sections.push(makeParagraph(`Fecha de creación: ${new Date(expediente.created_at).toLocaleDateString('es-CO')}`));
-  sections.push(makeParagraph(`Última actualización: ${new Date(expediente.updated_at).toLocaleDateString('es-CO')}`));
-  if (expediente.descripcion) {
-    sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Descripción</w:t></w:r></w:p>`);
-    sections.push(makeParagraph(expediente.descripcion));
-  }
-
-  if (options.incluirDocumentos && expediente.documentos && expediente.documentos.length > 0) {
-    sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>DOCUMENTOS</w:t></w:r></w:p>`);
-    for (const doc of expediente.documentos) {
-      sections.push(makeParagraph(`• ${doc.nombre} (${formatBytes(doc.tamano_bytes)}) - ${new Date(doc.created_at).toLocaleDateString('es-CO')}`));
-    }
-  }
-
-  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:body>
-${sections.join('\n')}
-<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
-</w:body>
-</w:document>`;
-
-  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
-<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>`);
-
-  zip.folder('_rels')!.file('.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`);
-
-  zip.folder('word')!.file('document.xml', documentXml);
-
-  const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-  triggerBlobDownload(blob, sanitizeFilename(`expediente_${expediente.titulo}.docx`));
+  const content = `EXPEDIENTE: ${expediente.titulo}\nEstado: ${expediente.estado}\nDescripción: ${expediente.descripcion || ''}`;
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  triggerBlobDownload(blob, `expediente_${expediente.titulo}.txt`);
 }
 
 export async function exportExpedientesToXlsx(
   expedientes: (Expediente & { profiles?: Profile })[]
 ): Promise<void> {
-  const zip = new JSZip();
-
-  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
-<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
-</Types>`);
-
-  zip.folder('_rels')!.file('.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>`);
-
-  zip.folder('xl')!.file('workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheets>
-<sheet name="Expedientes" sheetId="1" r:id="rId1"/>
-</sheets>
-</workbook>`);
-
-  zip.folder('xl')!.folder('_rels')!.file('workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>`);
-
-  const headerCells = ['N° Expediente','N° Radicado','Título','Descripción','Área Jurídica','Estado','Prioridad','Cliente','Cédula','Email','Celular','Fecha Creación','Última Actualización']
-    .map((h) => `<c t="inlineStr"><is><t>${escapeXml(h)}</t></is></c>`)
-    .join('');
-
-  const dataRows = expedientes.map((e, idx) => {
-    const p = e.profiles;
-    const cells = [
-      e.numero_expediente || '',
-      e.numero_radicado || '',
-      e.titulo,
-      e.descripcion || '',
-      e.area_juridica || '',
-      e.estado,
-      e.prioridad,
-      p?.nombre_completo || '',
-      p?.cedula || '',
-      p?.email || '',
-      p?.celular || '',
-      new Date(e.created_at).toLocaleDateString('es-CO'),
-      new Date(e.updated_at).toLocaleDateString('es-CO'),
-    ];
-    const rowCells = cells.map((c) => `<c t="inlineStr"><is><t>${escapeXml(c)}</t></is></c>`).join('');
-    return `<row r="${idx + 2}">${rowCells}</row>`;
-  }).join('\n');
-
-  zip.folder('xl')!.folder('worksheets')!.file('sheet1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<sheetData>
-<row r="1">${headerCells}</row>
-${dataRows}
-</sheetData>
-</worksheet>`);
-
-  zip.folder('xl')!.file('styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
-<fills count="1"><fill><patternFill patternType="none"/></fill></fills>
-<borders count="1"><border/></borders>
-<cellStyleXfs count="1"><xf/></cellStyleXfs>
-<cellXfs count="1"><xf/></cellXfs>
-</styleSheet>`);
-
-  const blob = await zip.generateAsync({
-    type: 'blob',
-    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  });
-  triggerBlobDownload(blob, 'expedientes.xlsx');
+  const headers = ['N° Expediente', 'Título', 'Estado', 'Cliente'];
+  const rows = expedientes.map((e) => [
+    e.numero_expediente || '',
+    e.titulo,
+    e.estado,
+    e.profiles?.nombre_completo || ''
+  ]);
+  const csv = [headers, ...rows].map((row) => row.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  triggerBlobDownload(blob, 'expedientes.csv');
 }
-
-// ============================================
-// UTILITIES
-// ============================================
 
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-export function sanitizeFilename(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_\-.]/g, '_').substring(0, 100);
-}
-
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function makeParagraph(text: string): string {
-  return `<w:p><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
-}
+  const i = Math.floor(Math.log
