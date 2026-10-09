@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, PRIORIDADES } from '../../lib/supabase';
-import type { Expediente, Documento, Profile, Observacion, Seguimiento, HistorialEntry, ConfigEstado } from '../../types';
+import type { Expediente, Documento, Profile, Observacion, Seguimiento, HistorialEntry, ConfigEstado, AnalisisJuridico } from '../../types';
 import {
   searchExpedientes,
   uploadDocument,
@@ -46,7 +46,9 @@ export default function AdminExpedientes() {
   const [expObservaciones, setExpObservaciones] = useState<Observacion[]>([]);
   const [expSeguimientos, setExpSeguimientos] = useState<Seguimiento[]>([]);
   const [expHistorial, setExpHistorial] = useState<HistorialEntry[]>([]);
-  const [detailTab, setDetailTab] = useState<'info' | 'documentos' | 'seguimientos' | 'observaciones' | 'historial'>('info');
+  const [expAnalisis, setExpAnalisis] = useState<AnalisisJuridico[]>([]);
+  const [detailTab, setDetailTab] = useState<'info' | 'documentos' | 'seguimientos' | 'observaciones' | 'historial' | 'analisis'>('info');
+  const [newAnalisis, setNewAnalisis] = useState({ tipo: 'estructurado' as 'estructurado' | 'ia' | 'jurisprudencia', titulo: '', contenido: '', resumen: '' });
   const [detailLoading, setDetailLoading] = useState(false);
 
   // New expediente modal
@@ -184,17 +186,19 @@ export default function AdminExpedientes() {
     setEditForm(exp);
 
     try {
-      const [docRes, obsRes, segRes, histRes] = await Promise.all([
+      const [docRes, obsRes, segRes, histRes, anaRes] = await Promise.all([
         supabase.from('documentos').select('*').eq('expediente_id', exp.id).order('created_at', { ascending: false }),
         supabase.from('observaciones').select('*, autor:profiles!observaciones_autor_id_fkey(*)').eq('expediente_id', exp.id).order('created_at', { ascending: false }),
         supabase.from('seguimientos').select('*').eq('expediente_id', exp.id).order('fecha_actuacion', { ascending: false }),
         supabase.from('historial_expedientes').select('*').eq('expediente_id', exp.id).order('created_at', { ascending: false }),
+        supabase.from('analisis_juridicos').select('*').eq('expediente_id', exp.id).order('creado_en', { ascending: false }),
       ]);
 
       if (docRes.data) setExpDocumentos(docRes.data as Documento[]);
       if (obsRes.data) setExpObservaciones(obsRes.data as Observacion[]);
       if (segRes.data) setExpSeguimientos(segRes.data as Seguimiento[]);
       if (histRes.data) setExpHistorial(histRes.data as HistorialEntry[]);
+      if (anaRes.data) setExpAnalisis(anaRes.data as AnalisisJuridico[]);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -353,11 +357,12 @@ export default function AdminExpedientes() {
   const handleExportDocx = async () => {
     if (!exportTarget) return;
     // Load full data for export
-    const [docRes, obsRes, segRes, histRes] = await Promise.all([
+    const [docRes, obsRes, segRes, histRes, anaRes] = await Promise.all([
       supabase.from('documentos').select('*').eq('expediente_id', exportTarget.id).order('created_at', { ascending: false }),
       supabase.from('observaciones').select('*').eq('expediente_id', exportTarget.id).order('created_at', { ascending: false }),
       supabase.from('seguimientos').select('*').eq('expediente_id', exportTarget.id).order('fecha_actuacion', { ascending: false }),
       supabase.from('historial_expedientes').select('*').eq('expediente_id', exportTarget.id).order('created_at', { ascending: false }),
+      supabase.from('analisis_juridicos').select('*').eq('expediente_id', exportTarget.id).order('creado_en', { ascending: false }),
     ]);
 
     const fullExp = {
@@ -366,6 +371,7 @@ export default function AdminExpedientes() {
       observaciones: (obsRes.data || []) as Observacion[],
       seguimientos: (segRes.data || []) as Seguimiento[],
       historial: (histRes.data || []) as HistorialEntry[],
+      analisis: (anaRes.data || []) as AnalisisJuridico[],
     };
 
     await exportExpedienteToDocx(fullExp, exportOptions);
@@ -652,6 +658,7 @@ export default function AdminExpedientes() {
               <button className={detailTab === 'seguimientos' ? 'active' : ''} onClick={() => setDetailTab('seguimientos')}>Actuaciones ({expSeguimientos.length})</button>
               <button className={detailTab === 'observaciones' ? 'active' : ''} onClick={() => setDetailTab('observaciones')}>Observaciones ({expObservaciones.length})</button>
               <button className={detailTab === 'historial' ? 'active' : ''} onClick={() => setDetailTab('historial')}>Historial ({expHistorial.length})</button>
+              <button className={detailTab === 'analisis' ? 'active' : ''} onClick={() => setDetailTab('analisis')}>Análisis ({expAnalisis.length})</button>
             </div>
 
             {detailLoading ? (
@@ -923,6 +930,83 @@ export default function AdminExpedientes() {
                     )}
                   </div>
                 )}
+
+                {/* ANALISIS JURIDICO TAB */}
+                {detailTab === 'analisis' && (
+                  <div className="detail-section">
+                    <div className="analisis-form">
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label>Tipo de análisis</label>
+                          <select value={newAnalisis.tipo} onChange={(e) => setNewAnalisis({ ...newAnalisis, tipo: e.target.value as 'estructurado' | 'ia' | 'jurisprudencia' })}>
+                            <option value="estructurado">Estructurado (manual)</option>
+                            <option value="ia">Con inteligencia artificial</option>
+                            <option value="jurisprudencia">Búsqueda jurisprudencial</option>
+                          </select>
+                        </div>
+                        <div className="form-group">
+                          <label>Título</label>
+                          <input value={newAnalisis.titulo} onChange={(e) => setNewAnalisis({ ...newAnalisis, titulo: e.target.value })} placeholder="Título del análisis" />
+                        </div>
+                      </div>
+                      <div className="form-group">
+                        <label>Contenido del análisis</label>
+                        <textarea value={newAnalisis.contenido} onChange={(e) => setNewAnalisis({ ...newAnalisis, contenido: e.target.value })} rows={5} placeholder="Escriba el análisis jurídico del caso…" />
+                      </div>
+                      {newAnalisis.tipo === 'ia' && (
+                        <div className="analisis-notice">
+                          <strong>Aviso:</strong> El análisis con IA requiere una API de inteligencia artificial configurada en el servidor. Actualmente no hay credenciales de IA configuradas. El análisis se guardará como texto estructurado para futura referencia.
+                        </div>
+                      )}
+                      {newAnalisis.tipo === 'jurisprudencia' && (
+                        <div className="analisis-notice">
+                          <strong>Aviso:</strong> La búsqueda jurisprudencial requiere acceso a una base de datos externa de jurisprudencia. Actualmente no hay un servicio configurado. Puede registrar manualmente las referencias encontradas.
+                        </div>
+                      )}
+                      <div className="form-actions">
+                        <button className="btn btn-primary btn-sm" onClick={async () => {
+                          if (!selectedExp || !newAnalisis.contenido.trim()) return;
+                          const { error } = await supabase.from('analisis_juridicos').insert({
+                            expediente_id: selectedExp.id,
+                            tipo: newAnalisis.tipo,
+                            titulo: newAnalisis.titulo || 'Análisis jurídico',
+                            contenido: newAnalisis.contenido,
+                            resumen: newAnalisis.resumen || null,
+                          });
+                          if (error) { setError(error.message); return; }
+                          await logAuditoria('crear_analisis', `Análisis: ${newAnalisis.titulo}`, 'analisis', null);
+                          setNewAnalisis({ tipo: 'estructurado', titulo: '', contenido: '', resumen: '' });
+                          const { data } = await supabase.from('analisis_juridicos').select('*').eq('expediente_id', selectedExp.id).order('creado_en', { ascending: false });
+                          if (data) setExpAnalisis(data as AnalisisJuridico[]);
+                        }}>Guardar análisis</button>
+                      </div>
+                    </div>
+
+                    {expAnalisis.length === 0 ? (
+                      <div className="empty-state"><p>No hay análisis jurídicos guardados.</p></div>
+                    ) : (
+                      <div className="analisis-list">
+                        {expAnalisis.map((a) => (
+                          <div key={a.id} className="analisis-item">
+                            <div className="analisis-header">
+                              <strong>{a.titulo}</strong>
+                              <span className={`badge ${a.tipo === 'ia' ? 'badge-gold' : a.tipo === 'jurisprudencia' ? 'badge-blue' : 'badge-green'}`}>{a.tipo}</span>
+                            </div>
+                            <p className="analisis-content">{a.contenido}</p>
+                            <div className="analisis-meta">
+                              <span>{new Date(a.creado_en).toLocaleDateString('es-CO')}</span>
+                              <button className="btn-icon btn-danger" onClick={async () => {
+                                const { error } = await supabase.from('analisis_juridicos').delete().eq('id', a.id);
+                                if (error) { setError(error.message); return; }
+                                setExpAnalisis(expAnalisis.filter((x) => x.id !== a.id));
+                              }}>Eliminar</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -1096,6 +1180,10 @@ export default function AdminExpedientes() {
             <label className="checkbox-label">
               <input type="checkbox" checked={exportOptions.incluirHistorial} onChange={(e) => setExportOptions({ ...exportOptions, incluirHistorial: e.target.checked })} />
               <span>Historial de cambios</span>
+            </label>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={exportOptions.incluirAnalisis} onChange={(e) => setExportOptions({ ...exportOptions, incluirAnalisis: e.target.checked })} />
+              <span>Análisis jurídico</span>
             </label>
             <div className="form-actions">
               <button className="btn btn-primary" onClick={handleExportDocx}>Exportar a Word</button>

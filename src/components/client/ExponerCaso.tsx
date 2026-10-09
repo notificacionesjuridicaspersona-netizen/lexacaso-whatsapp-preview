@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { uploadDocument, logAuditoria, sendNotification, validateFile, formatBytes } from '../../lib/helpers';
@@ -26,13 +26,13 @@ export default function ExponerCaso({ onComplete, onCancel }: ExponerCasoProps) 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useState(() => {
+  useEffect(() => {
     (async () => {
       const { data } = await supabase.from('config_categorias').select('*').order('orden');
       if (data) setCategorias(data as ConfigCategoria[]);
       setLoadingCats(false);
     })();
-  });
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(e.target.files || []);

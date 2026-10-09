@@ -645,6 +645,44 @@ body {
 .hist-date { color: var(--color-text-muted); font-size: 0.78rem; }
 
 /* ============================================
+   ANALISIS JURIDICO
+   ============================================ */
+.analisis-form {
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  padding: 16px; margin-bottom: 20px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.analisis-notice {
+  background: #fef3c7;
+  border-left: 3px solid #f59e0b;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem; color: #92400e;
+}
+.analisis-list { display: flex; flex-direction: column; gap: 12px; }
+.analisis-item {
+  background: var(--color-bg);
+  padding: 14px 18px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--color-accent);
+}
+.analisis-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-bottom: 8px;
+}
+.analisis-header strong { font-size: 0.9rem; color: var(--color-primary); }
+.analisis-content {
+  font-size: 0.85rem; line-height: 1.5;
+  margin-bottom: 8px; white-space: pre-wrap;
+}
+.analisis-resumen { font-size: 0.82rem; color: var(--color-text-muted); margin-bottom: 6px; }
+.analisis-meta {
+  display: flex; gap: 12px; justify-content: space-between;
+  font-size: 0.75rem; color: var(--color-text-muted);
+}
+
+/* ============================================
    INLINE FORM
    ============================================ */
 .inline-form {

@@ -234,6 +234,7 @@ export async function exportExpedienteToDocx(
     incluirSeguimientos: boolean;
     incluirObservaciones: boolean;
     incluirHistorial: boolean;
+    incluirAnalisis?: boolean;
   }
 ): Promise<void> {
   const zip = new JSZip();
@@ -299,6 +300,17 @@ export async function exportExpedienteToDocx(
     sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>HISTORIAL DE CAMBIOS</w:t></w:r></w:p>`);
     for (const h of expediente.historial) {
       sections.push(makeParagraph(`• ${h.campo}: ${h.valor_anterior || '(vacío)'} → ${h.valor_nuevo || '(vacío)'} - ${new Date(h.created_at).toLocaleDateString('es-CO')}`));
+    }
+  }
+
+  // Análisis jurídico
+  if (options.incluirAnalisis && expediente.analisis && expediente.analisis.length > 0) {
+    sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>ANÁLISIS JURÍDICO</w:t></w:r></w:p>`);
+    for (const a of expediente.analisis) {
+      sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${escapeXml(a.titulo)} (${a.tipo})</w:t></w:r></w:p>`);
+      sections.push(makeParagraph(a.contenido));
+      if (a.resumen) sections.push(makeParagraph(`Resumen: ${a.resumen}`));
+      sections.push(makeParagraph(`Fecha: ${new Date(a.creado_en).toLocaleDateString('es-CO')}`));
     }
   }
 

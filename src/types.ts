@@ -32,6 +32,7 @@ export interface Expediente {
   observaciones?: Observacion[];
   seguimientos?: Seguimiento[];
   historial?: HistorialEntry[];
+  analisis?: AnalisisJuridico[];
 }
 
 export interface Documento {
@@ -112,6 +113,19 @@ export interface ConfigTipoActuacion {
   nombre: string;
   descripcion: string | null;
   orden: number;
+}
+
+export interface AnalisisJuridico {
+  id: string;
+  expediente_id: string;
+  autor_id: string;
+  documento_id: string | null;
+  tipo: 'estructurado' | 'ia' | 'jurisprudencia';
+  titulo: string;
+  contenido: string;
+  resumen: string | null;
+  creado_en: string;
+  actualizado_en: string;
 }
 
 export interface SearchResult {
