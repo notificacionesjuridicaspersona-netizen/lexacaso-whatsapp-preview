@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getAppSettings, logAuditoria } from '../../lib/helpers';
 import { isAIConfigured, runAI } from '../../lib/ai';
+import { extractExpedienteDocumentText, buildContextWithDocuments } from '../../lib/document-extract';
 import type { AnalisisJuridico } from '../../types';
 
 interface HerramientasJuridicasProps {
@@ -43,6 +44,8 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
   const [editContent, setEditContent] = useState('');
   const [editTitulo, setEditTitulo] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [docContext, setDocContext] = useState<string>('');
+  const [loadingDocs, setLoadingDocs] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -54,42 +57,35 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
   }, [expedienteId]);
 
   const aiConfigured = isAIConfigured() || settings.ai_service_configured === 'true';
-  const jurisprudenciaConfigured = settings.jurisprudencia_service_configured === 'true';
+  const jurisprudenciaConfigured = isAIConfigured() || settings.jurisprudencia_service_configured === 'true';
 
   const isToolEnabled = (key: string) => settings[key] !== 'false';
 
-  const handleRunTool = async (tool: ToolDef) => {
-    if (!aiConfigured) {
-      setError(`El servicio de IA no está configurado. Para usar "${tool.label}" automáticamente, debe configurar una API de IA (VITE_OPENAI_API_KEY o VITE_GEMINI_API_KEY).`);
-      return;
-    }
-    setRunning(true);
-    setError(null);
+  const loadDocumentContext = async (): Promise<string> => {
+    setLoadingDocs(true);
     try {
-      const { data: docs } = await supabase
-        .from('documentos')
-        .select('nombre, extension')
-        .eq('expediente_id', expedienteId);
-
       const { data: exp } = await supabase
         .from('expedientes')
         .select('titulo, descripcion, area_juridica, estado, pretensiones, actuaciones_previas, observaciones_adicionales')
         .eq('id', expedienteId)
         .single();
 
-      const contextParts: string[] = [];
-      if (exp) {
-        contextParts.push(`Título: ${exp.titulo}`);
-        if (exp.descripcion) contextParts.push(`Descripción: ${exp.descripcion}`);
-        if (exp.area_juridica) contextParts.push(`Área jurídica: ${exp.area_juridica}`);
-        if (exp.pretensiones) contextParts.push(`Pretensiones: ${exp.pretensiones}`);
-        if (exp.actuaciones_previas) contextParts.push(`Actuaciones previas: ${exp.actuaciones_previas}`);
-        if (exp.observaciones_adicionales) contextParts.push(`Observaciones: ${exp.observaciones_adicionales}`);
-      }
-      if (docs && docs.length > 0) {
-        contextParts.push(`Documentos: ${docs.map((d) => d.nombre).join(', ')}`);
-      }
-      const context = contextParts.join('\n');
+      const { resumen } = await extractExpedienteDocumentText(expedienteId);
+      const context = buildContextWithDocuments(exp, resumen);
+      setDocContext(context);
+      return context;
+    } catch {
+      return '';
+    } finally {
+      setLoadingDocs(false);
+    }
+  };
+
+  const handleRunTool = async (tool: ToolDef) => {
+    setRunning(true);
+    setError(null);
+    try {
+      const context = await loadDocumentContext();
 
       const result = await runAI(tool.prompt, context);
       if (result.error) {
@@ -112,6 +108,24 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
       setError((e as Error).message);
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleOpenManual = async (tool: ToolDef) => {
+    setEditingTool(tool);
+    setEditTitulo(tool.label);
+    setError(null);
+    setLoadingDocs(true);
+    try {
+      const context = await loadDocumentContext();
+      const docSummary = context
+        ? `\n\n--- CONTENIDO EXTRAÍDO DE LOS DOCUMENTOS DEL EXPEDIENTE ---\n${context}\n\n--- FIN DEL CONTENIDO DE DOCUMENTOS ---\n\nEscriba aquí su análisis basado en el contenido de los documentos y los datos del expediente:\n`
+        : '';
+      setEditContent(docSummary);
+    } catch {
+      setEditContent('');
+    } finally {
+      setLoadingDocs(false);
     }
   };
 
@@ -147,11 +161,8 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
     <div className="herramientas-juridicas">
       {error && <div className="alert alert-error">{error}<button className="alert-close" onClick={() => setError(null)}>×</button></div>}
 
-      {!aiConfigured && (
-        <div className="service-status-banner">
-          <strong>Servicio de IA no configurado.</strong> Las herramientas pueden usarse en modo manual (escribiendo el análisis) pero no generarán resultados automáticos.
-          {!jurisprudenciaConfigured && ' La búsqueda jurisprudencial automática también requiere configuración.'}
-        </div>
+      {loadingDocs && (
+        <div className="alert alert-info">Leyendo documentos del expediente…</div>
       )}
 
       <div className="tools-grid">
@@ -177,7 +188,7 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
                         {running ? 'Procesando…' : 'Ejecutar IA'}
                       </button>
                     )}
-                    <button className="btn btn-secondary btn-sm" onClick={() => { setEditingTool(tool); setEditTitulo(tool.label); setEditContent(''); }}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => handleOpenManual(tool)}>
                       Manual
                     </button>
                   </>
@@ -197,7 +208,7 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
           </div>
           <div className="form-group">
             <label>Contenido del análisis</label>
-            <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={8} placeholder={editingTool.prompt} />
+            <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={12} placeholder={editingTool.prompt} />
           </div>
           <div className="form-actions">
             <button className="btn btn-primary btn-sm" onClick={handleSaveManual}>Guardar análisis</button>

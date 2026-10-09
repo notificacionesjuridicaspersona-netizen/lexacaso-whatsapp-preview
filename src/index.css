@@ -210,6 +210,11 @@ body {
 .alert-success {
   background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0;
 }
+.alert-info {
+  background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;
+  border-radius: 8px; padding: 10px 14px; font-size: 0.85rem;
+  margin-bottom: 12px;
+}
 .alert-close {
   background: none; border: none; cursor: pointer;
   font-size: 1.1rem; color: inherit; opacity: 0.6;

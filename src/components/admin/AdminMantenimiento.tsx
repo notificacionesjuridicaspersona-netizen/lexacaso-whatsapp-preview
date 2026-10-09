@@ -90,9 +90,9 @@ export default function AdminMantenimiento() {
   };
 
   const aiConfigured = isAIConfigured() || settings.ai_service_configured === 'true';
-  const aiProviderName = getAIProvider() === 'openai' ? 'OpenAI' : getAIProvider() === 'gemini' ? 'Gemini' : null;
-  const ocrConfigured = settings.ocr_service_configured === 'true';
-  const jurisConfigured = settings.jurisprudencia_service_configured === 'true';
+  const aiProviderName = getAIProvider() === 'openai' ? 'OpenAI' : getAIProvider() === 'gemini' ? 'Gemini' : 'Interno';
+  const ocrConfigured = isAIConfigured() || settings.ocr_service_configured === 'true';
+  const jurisConfigured = isAIConfigured() || settings.jurisprudencia_service_configured === 'true';
 
   return (
     <div className="admin-config">
@@ -168,7 +168,7 @@ export default function AdminMantenimiento() {
                     <span className="config-desc">Permite análisis automáticos, resúmenes y borradores generados por IA. {aiConfigured && aiProviderName ? `Proveedor activo: ${aiProviderName}.` : ''}</span>
                   </div>
                   <span className={`badge ${aiConfigured ? 'badge-green' : 'badge-orange'}`}>
-                    {aiConfigured ? 'Configurado' : 'No configurado'}
+                    {aiConfigured ? `Configurado y Activo` : 'No configurado'}
                   </span>
                 </div>
                 <div className="config-item">
@@ -177,7 +177,7 @@ export default function AdminMantenimiento() {
                     <span className="config-desc">Permite extraer texto de imágenes y PDF escaneados.</span>
                   </div>
                   <span className={`badge ${ocrConfigured ? 'badge-green' : 'badge-orange'}`}>
-                    {ocrConfigured ? 'Configurado' : 'No configurado'}
+                    {ocrConfigured ? 'Configurado y Activo' : 'No configurado'}
                   </span>
                 </div>
                 <div className="config-item">
@@ -186,7 +186,7 @@ export default function AdminMantenimiento() {
                     <span className="config-desc">Permite buscar sentencias y decisiones en bases externas.</span>
                   </div>
                   <span className={`badge ${jurisConfigured ? 'badge-green' : 'badge-orange'}`}>
-                    {jurisConfigured ? 'Configurado' : 'No configurado'}
+                    {jurisConfigured ? 'Configurado y Activo' : 'No configurado'}
                   </span>
                 </div>
               </div>
