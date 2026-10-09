@@ -683,13 +683,42 @@ export async function sendNotification(
       }
     );
 
+    const data = await response.json().catch(() => ({}));
+
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      return { success: false, error: err.error || `Error ${response.status}` };
+      await supabase.from('notificaciones').insert({
+        destinatario: to, evento: subject, estado: 'fallida',
+        resultado: data.error || `Error ${response.status}`,
+      });
+      return { success: false, error: data.error || `Error ${response.status}` };
     }
 
+    await supabase.from('notificaciones').insert({
+      destinatario: to, evento: subject, estado: 'enviada',
+      resultado: data.id || 'OK',
+    });
     return { success: true };
   } catch (e) {
+    await supabase.from('notificaciones').insert({
+      destinatario: to, evento: subject, estado: 'fallida',
+      resultado: (e as Error).message,
+    });
     return { success: false, error: (e as Error).message };
   }
+}
+
+export async function getAppSettings(): Promise<Record<string, string>> {
+  const { data } = await supabase.from('app_settings').select('clave, valor');
+  const map: Record<string, string> = {};
+  if (data) {
+    for (const row of data) {
+      map[row.clave] = row.valor || '';
+    }
+  }
+  return map;
+}
+
+export async function updateAppSetting(clave: string, valor: string): Promise<boolean> {
+  const { error } = await supabase.from('app_settings').update({ valor, updated_at: new Date().toISOString() }).eq('clave', clave);
+  return !error;
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { uploadDocument, logAuditoria, sendNotification, validateFile, formatBytes } from '../../lib/helpers';
+import { uploadDocument, sendNotification, validateFile, formatBytes, getAppSettings } from '../../lib/helpers';
 import type { ConfigCategoria } from '../../types';
 
 interface ExponerCasoProps {
@@ -14,12 +14,18 @@ export default function ExponerCaso({ onComplete, onCancel }: ExponerCasoProps) 
   const [step, setStep] = useState(1);
   const [categorias, setCategorias] = useState<ConfigCategoria[]>([]);
   const [loadingCats, setLoadingCats] = useState(true);
+  const [adminEmail, setAdminEmail] = useState('notipersonales2026@gmail.com');
 
   const [formData, setFormData] = useState({
     categoria: '',
     titulo: '',
     descripcion: '',
     numero_radicado: '',
+    entidad_involucrada: '',
+    fecha_hechos: '',
+    pretensiones: '',
+    actuaciones_previas: '',
+    observaciones_adicionales: '',
   });
   const [files, setFiles] = useState<File[]>([]);
   const [fileErrors, setFileErrors] = useState<string[]>([]);
@@ -31,6 +37,8 @@ export default function ExponerCaso({ onComplete, onCancel }: ExponerCasoProps) 
       const { data } = await supabase.from('config_categorias').select('*').order('orden');
       if (data) setCategorias(data as ConfigCategoria[]);
       setLoadingCats(false);
+      const settings = await getAppSettings();
+      if (settings.admin_email) setAdminEmail(settings.admin_email);
     })();
   }, []);
 
@@ -74,6 +82,11 @@ export default function ExponerCaso({ onComplete, onCancel }: ExponerCasoProps) 
           descripcion: formData.descripcion || null,
           area_juridica: formData.categoria || null,
           numero_radicado: formData.numero_radicado || null,
+          entidad_involucrada: formData.entidad_involucrada || null,
+          fecha_hechos: formData.fecha_hechos || null,
+          pretensiones: formData.pretensiones || null,
+          actuaciones_previas: formData.actuaciones_previas || null,
+          observaciones_adicionales: formData.observaciones_adicionales || null,
           estado: 'Recibido',
           prioridad: 'Media',
         })
@@ -83,21 +96,14 @@ export default function ExponerCaso({ onComplete, onCancel }: ExponerCasoProps) 
       if (expError) throw new Error(expError.message);
       if (!expData) throw new Error('No se pudo crear el expediente');
 
-      // Upload files
       for (const file of files) {
-        const result = await uploadDocument(file, expData.id, profile.id);
-        if (!result.success) {
-          // Continue even if some files fail
-        }
+        await uploadDocument(file, expData.id, profile.id);
       }
 
-      await logAuditoria('crear_expediente_cliente', `Expediente: ${formData.titulo}`, 'expediente', expData.id);
-
-      // Notify admin
       await sendNotification(
-        'notipersonales2026@gmail.com',
+        adminEmail,
         'Nuevo caso expuesto',
-        `El cliente ${profile.nombre_completo} ha expuesto un nuevo caso: "${formData.titulo}".`
+        `El cliente ${profile.nombre_completo} ha expuesto un nuevo caso: "${formData.titulo}". Ingrese a la plataforma para revisarlo.`
       );
 
       onComplete();
@@ -117,7 +123,6 @@ export default function ExponerCaso({ onComplete, onCancel }: ExponerCasoProps) 
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      {/* Step indicator */}
       <div className="step-indicator">
         <div className={`step ${step >= 1 ? 'active' : ''}`}>
           <span className="step-num">1</span>
@@ -125,7 +130,7 @@ export default function ExponerCaso({ onComplete, onCancel }: ExponerCasoProps) 
         </div>
         <div className={`step ${step >= 2 ? 'active' : ''}`}>
           <span className="step-num">2</span>
-          <span className="step-label">Relato</span>
+          <span className="step-label">Detalles</span>
         </div>
         <div className={`step ${step >= 3 ? 'active' : ''}`}>
           <span className="step-num">3</span>
@@ -138,7 +143,6 @@ export default function ExponerCaso({ onComplete, onCancel }: ExponerCasoProps) 
       </div>
 
       <div className="form-card">
-        {/* Step 1: Category */}
         {step === 1 && (
           <div className="form-step">
             <h3>¿Qué tipo de caso desea exponer?</h3>
@@ -165,38 +169,42 @@ export default function ExponerCaso({ onComplete, onCancel }: ExponerCasoProps) 
           </div>
         )}
 
-        {/* Step 2: Description */}
         {step === 2 && (
           <div className="form-step">
-            <h3>Cuéntenos sobre su caso</h3>
+            <h3>Detalles del caso</h3>
             <div className="form-group">
               <label>Título del caso *</label>
-              <input
-                type="text"
-                value={formData.titulo}
-                onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
-                placeholder="Resumen breve del caso"
-              />
+              <input type="text" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} placeholder="Resumen breve del caso" />
             </div>
-            {formData.numero_radicado !== undefined && (
+            <div className="form-row">
               <div className="form-group">
-                <label>Número de radicado (si lo conoce)</label>
-                <input
-                  type="text"
-                  value={formData.numero_radicado}
-                  onChange={(e) => setFormData({ ...formData, numero_radicado: e.target.value })}
-                  placeholder="N° de proceso judicial o administrativo"
-                />
+                <label>Número de radicado (si existe)</label>
+                <input type="text" value={formData.numero_radicado} onChange={(e) => setFormData({ ...formData, numero_radicado: e.target.value })} placeholder="N° de proceso judicial o administrativo" />
               </div>
-            )}
+              <div className="form-group">
+                <label>Entidad, persona o empresa involucrada</label>
+                <input type="text" value={formData.entidad_involucrada} onChange={(e) => setFormData({ ...formData, entidad_involucrada: e.target.value })} placeholder="Ej: Juzgado, entidad pública, empresa…" />
+              </div>
+            </div>
             <div className="form-group">
-              <label>Descripción detallada *</label>
-              <textarea
-                value={formData.descripcion}
-                onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                rows={6}
-                placeholder="Describa los hechos, fechas relevantes, personas involucradas y cualquier información que considere importante."
-              />
+              <label>Fecha de los hechos</label>
+              <input type="date" value={formData.fecha_hechos} onChange={(e) => setFormData({ ...formData, fecha_hechos: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Descripción de los hechos (orden cronológico) *</label>
+              <textarea value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} rows={5} placeholder="Describa los hechos en orden cronológico, con fechas relevantes." />
+            </div>
+            <div className="form-group">
+              <label>Pretensiones o resultado que busca</label>
+              <textarea value={formData.pretensiones} onChange={(e) => setFormData({ ...formData, pretensiones: e.target.value })} rows={3} placeholder="¿Qué busca lograr con este caso?" />
+            </div>
+            <div className="form-group">
+              <label>Actuaciones realizadas previamente</label>
+              <textarea value={formData.actuaciones_previas} onChange={(e) => setFormData({ ...formData, actuaciones_previas: e.target.value })} rows={3} placeholder="Demandas, recursos, peticiones o gestiones anteriores." />
+            </div>
+            <div className="form-group">
+              <label>Observaciones adicionales</label>
+              <textarea value={formData.observaciones_adicionales} onChange={(e) => setFormData({ ...formData, observaciones_adicionales: e.target.value })} rows={2} placeholder="Cualquier información adicional que considere relevante." />
             </div>
             <div className="form-actions">
               <button className="btn btn-secondary" onClick={() => setStep(1)}>Atrás</button>
@@ -205,18 +213,12 @@ export default function ExponerCaso({ onComplete, onCancel }: ExponerCasoProps) 
           </div>
         )}
 
-        {/* Step 3: Documents */}
         {step === 3 && (
           <div className="form-step">
             <h3>Adjunte documentos (opcional)</h3>
             <div className="import-zone">
-              <input
-                type="file"
-                multiple
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.rar,.jpg,.jpeg,.png"
-                onChange={handleFileChange}
-              />
-              <p className="import-hint">PDF, DOC, DOCX, XLS, XLSX, ZIP, RAR, JPG, PNG (máx. 50MB)</p>
+              <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.jpg,.jpeg,.png" onChange={handleFileChange} />
+              <p className="import-hint">PDF, DOC, DOCX, XLS, XLSX, ZIP, JPG, PNG (máx. 50MB)</p>
             </div>
             {fileErrors.length > 0 && (
               <div className="alert alert-error">
@@ -241,33 +243,20 @@ export default function ExponerCaso({ onComplete, onCancel }: ExponerCasoProps) 
           </div>
         )}
 
-        {/* Step 4: Review */}
         {step === 4 && (
           <div className="form-step">
             <h3>Revise la información</h3>
             <div className="review-section">
-              <div className="review-item">
-                <span className="review-label">Categoría:</span>
-                <span>{formData.categoria}</span>
-              </div>
-              <div className="review-item">
-                <span className="review-label">Título:</span>
-                <span>{formData.titulo}</span>
-              </div>
-              {formData.numero_radicado && (
-                <div className="review-item">
-                  <span className="review-label">N° Radicado:</span>
-                  <span>{formData.numero_radicado}</span>
-                </div>
-              )}
-              <div className="review-item">
-                <span className="review-label">Descripción:</span>
-                <span>{formData.descripcion || '—'}</span>
-              </div>
-              <div className="review-item">
-                <span className="review-label">Documentos:</span>
-                <span>{files.length} archivo(s)</span>
-              </div>
+              <div className="review-item"><span className="review-label">Categoría:</span><span>{formData.categoria}</span></div>
+              <div className="review-item"><span className="review-label">Título:</span><span>{formData.titulo}</span></div>
+              {formData.numero_radicado && <div className="review-item"><span className="review-label">N° Radicado:</span><span>{formData.numero_radicado}</span></div>}
+              {formData.entidad_involucrada && <div className="review-item"><span className="review-label">Entidad:</span><span>{formData.entidad_involucrada}</span></div>}
+              {formData.fecha_hechos && <div className="review-item"><span className="review-label">Fecha hechos:</span><span>{formData.fecha_hechos}</span></div>}
+              <div className="review-item"><span className="review-label">Descripción:</span><span>{formData.descripcion || '—'}</span></div>
+              {formData.pretensiones && <div className="review-item"><span className="review-label">Pretensiones:</span><span>{formData.pretensiones}</span></div>}
+              {formData.actuaciones_previas && <div className="review-item"><span className="review-label">Actuaciones previas:</span><span>{formData.actuaciones_previas}</span></div>}
+              {formData.observaciones_adicionales && <div className="review-item"><span className="review-label">Observaciones:</span><span>{formData.observaciones_adicionales}</span></div>}
+              <div className="review-item"><span className="review-label">Documentos:</span><span>{files.length} archivo(s)</span></div>
             </div>
             <div className="form-actions">
               <button className="btn btn-secondary" onClick={() => setStep(3)}>Atrás</button>

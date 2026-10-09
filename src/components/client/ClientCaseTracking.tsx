@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { downloadDocument, formatBytes } from '../../lib/helpers';
 import type { Expediente, Documento, Seguimiento, Observacion, AnalisisJuridico } from '../../types';
+import Comentarios from '../shared/Comentarios';
 import Modal from '../ui/Modal';
 
 interface ClientCaseTrackingProps {
@@ -14,7 +15,7 @@ export default function ClientCaseTracking({ expediente, onClose }: ClientCaseTr
   const [seguimientos, setSeguimientos] = useState<Seguimiento[]>([]);
   const [observaciones, setObservaciones] = useState<Observacion[]>([]);
   const [analisis, setAnalisis] = useState<AnalisisJuridico[]>([]);
-  const [tab, setTab] = useState<'info' | 'documentos' | 'seguimientos' | 'observaciones' | 'analisis'>('info');
+  const [tab, setTab] = useState<'info' | 'documentos' | 'seguimientos' | 'observaciones' | 'comentarios' | 'analisis'>('info');
   const [loading, setLoading] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -53,6 +54,7 @@ export default function ClientCaseTracking({ expediente, onClose }: ClientCaseTr
             <button className={tab === 'documentos' ? 'active' : ''} onClick={() => setTab('documentos')}>Documentos ({documentos.length})</button>
             <button className={tab === 'seguimientos' ? 'active' : ''} onClick={() => setTab('seguimientos')}>Actuaciones ({seguimientos.length})</button>
             <button className={tab === 'observaciones' ? 'active' : ''} onClick={() => setTab('observaciones')}>Observaciones ({observaciones.length})</button>
+            <button className={tab === 'comentarios' ? 'active' : ''} onClick={() => setTab('comentarios')}>Comentarios</button>
             <button className={tab === 'analisis' ? 'active' : ''} onClick={() => setTab('analisis')}>Análisis ({analisis.length})</button>
           </div>
 
@@ -86,6 +88,18 @@ export default function ClientCaseTracking({ expediente, onClose }: ClientCaseTr
                     <span className="info-label">Fecha de creación</span>
                     <span className="info-value">{new Date(expediente.created_at).toLocaleDateString('es-CO')}</span>
                   </div>
+                  {expediente.entidad_involucrada && (
+                    <div className="info-item">
+                      <span className="info-label">Entidad involucrada</span>
+                      <span className="info-value">{expediente.entidad_involucrada}</span>
+                    </div>
+                  )}
+                  {expediente.fecha_hechos && (
+                    <div className="info-item">
+                      <span className="info-label">Fecha de los hechos</span>
+                      <span className="info-value">{expediente.fecha_hechos}</span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -148,6 +162,10 @@ export default function ClientCaseTracking({ expediente, onClose }: ClientCaseTr
                     ))}
                   </div>
                 )
+              )}
+
+              {tab === 'comentarios' && (
+                <Comentarios expedienteId={expediente.id} isAdmin={false} />
               )}
 
               {tab === 'analisis' && (

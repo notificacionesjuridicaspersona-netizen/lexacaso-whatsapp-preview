@@ -33,6 +33,11 @@ export interface Expediente {
   seguimientos?: Seguimiento[];
   historial?: HistorialEntry[];
   analisis?: AnalisisJuridico[];
+  entidad_involucrada?: string | null;
+  fecha_hechos?: string | null;
+  pretensiones?: string | null;
+  actuaciones_previas?: string | null;
+  observaciones_adicionales?: string | null;
 }
 
 export interface Documento {
@@ -126,6 +131,34 @@ export interface AnalisisJuridico {
   resumen: string | null;
   creado_en: string;
   actualizado_en: string;
+}
+
+export interface Comentario {
+  id: string;
+  expediente_id: string;
+  autor_id: string;
+  contenido: string;
+  visibilidad: 'cliente' | 'interno' | 'sistema';
+  created_at: string;
+  autor?: Profile;
+}
+
+export interface AppSetting {
+  id: string;
+  clave: string;
+  valor: string | null;
+  descripcion: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Notificacion {
+  id: string;
+  destinatario: string;
+  evento: string;
+  estado: 'pendiente' | 'enviada' | 'fallida';
+  resultado: string | null;
+  created_at: string;
 }
 
 export interface SearchResult {

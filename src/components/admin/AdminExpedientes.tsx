@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, PRIORIDADES } from '../../lib/supabase';
 import type { Expediente, Documento, Profile, Observacion, Seguimiento, HistorialEntry, ConfigEstado, AnalisisJuridico } from '../../types';
+import Comentarios from '../shared/Comentarios';
+import HerramientasJuridicas from './HerramientasJuridicas';
 import {
   searchExpedientes,
   uploadDocument,
@@ -47,7 +49,7 @@ export default function AdminExpedientes() {
   const [expSeguimientos, setExpSeguimientos] = useState<Seguimiento[]>([]);
   const [expHistorial, setExpHistorial] = useState<HistorialEntry[]>([]);
   const [expAnalisis, setExpAnalisis] = useState<AnalisisJuridico[]>([]);
-  const [detailTab, setDetailTab] = useState<'info' | 'documentos' | 'seguimientos' | 'observaciones' | 'historial' | 'analisis'>('info');
+  const [detailTab, setDetailTab] = useState<'info' | 'documentos' | 'seguimientos' | 'observaciones' | 'comentarios' | 'historial' | 'analisis' | 'herramientas'>('info');
   const [newAnalisis, setNewAnalisis] = useState({ tipo: 'estructurado' as 'estructurado' | 'ia' | 'jurisprudencia', titulo: '', contenido: '', resumen: '' });
   const [detailLoading, setDetailLoading] = useState(false);
 
@@ -278,6 +280,11 @@ export default function AdminExpedientes() {
     if (editForm.descripcion !== selectedExp.descripcion) updates.descripcion = editForm.descripcion;
     if (editForm.area_juridica !== selectedExp.area_juridica) updates.area_juridica = editForm.area_juridica;
     if (editForm.numero_radicado !== selectedExp.numero_radicado) updates.numero_radicado = editForm.numero_radicado;
+    if (editForm.entidad_involucrada !== selectedExp.entidad_involucrada) updates.entidad_involucrada = editForm.entidad_involucrada;
+    if (editForm.fecha_hechos !== selectedExp.fecha_hechos) updates.fecha_hechos = editForm.fecha_hechos;
+    if (editForm.pretensiones !== selectedExp.pretensiones) updates.pretensiones = editForm.pretensiones;
+    if (editForm.actuaciones_previas !== selectedExp.actuaciones_previas) updates.actuaciones_previas = editForm.actuaciones_previas;
+    if (editForm.observaciones_adicionales !== selectedExp.observaciones_adicionales) updates.observaciones_adicionales = editForm.observaciones_adicionales;
 
     if (Object.keys(updates).length > 0) {
       const { error } = await supabase.from('expedientes').update(updates).eq('id', selectedExp.id);
@@ -659,6 +666,8 @@ export default function AdminExpedientes() {
               <button className={detailTab === 'observaciones' ? 'active' : ''} onClick={() => setDetailTab('observaciones')}>Observaciones ({expObservaciones.length})</button>
               <button className={detailTab === 'historial' ? 'active' : ''} onClick={() => setDetailTab('historial')}>Historial ({expHistorial.length})</button>
               <button className={detailTab === 'analisis' ? 'active' : ''} onClick={() => setDetailTab('analisis')}>Análisis ({expAnalisis.length})</button>
+              <button className={detailTab === 'comentarios' ? 'active' : ''} onClick={() => setDetailTab('comentarios')}>Comentarios</button>
+              <button className={detailTab === 'herramientas' ? 'active' : ''} onClick={() => setDetailTab('herramientas')}>Herramientas</button>
             </div>
 
             {detailLoading ? (
@@ -701,6 +710,28 @@ export default function AdminExpedientes() {
                         <div className="form-group">
                           <label>Descripción</label>
                           <textarea value={editForm.descripcion || ''} onChange={(e) => setEditForm({ ...editForm, descripcion: e.target.value })} rows={4} />
+                        </div>
+                        <div className="form-row">
+                          <div className="form-group">
+                            <label>Entidad involucrada</label>
+                            <input value={editForm.entidad_involucrada || ''} onChange={(e) => setEditForm({ ...editForm, entidad_involucrada: e.target.value })} />
+                          </div>
+                          <div className="form-group">
+                            <label>Fecha de los hechos</label>
+                            <input type="date" value={editForm.fecha_hechos || ''} onChange={(e) => setEditForm({ ...editForm, fecha_hechos: e.target.value })} />
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label>Pretensiones</label>
+                          <textarea value={editForm.pretensiones || ''} onChange={(e) => setEditForm({ ...editForm, pretensiones: e.target.value })} rows={2} />
+                        </div>
+                        <div className="form-group">
+                          <label>Actuaciones previas</label>
+                          <textarea value={editForm.actuaciones_previas || ''} onChange={(e) => setEditForm({ ...editForm, actuaciones_previas: e.target.value })} rows={2} />
+                        </div>
+                        <div className="form-group">
+                          <label>Observaciones adicionales</label>
+                          <textarea value={editForm.observaciones_adicionales || ''} onChange={(e) => setEditForm({ ...editForm, observaciones_adicionales: e.target.value })} rows={2} />
                         </div>
                         <div className="form-actions">
                           <button className="btn btn-primary btn-sm" onClick={handleSaveEdit}>Guardar</button>
@@ -751,10 +782,40 @@ export default function AdminExpedientes() {
                             <span className="info-value">{new Date(selectedExp.updated_at).toLocaleDateString('es-CO')}</span>
                           </div>
                         </div>
+                        {selectedExp.entidad_involucrada && (
+                          <div className="info-item">
+                            <span className="info-label">Entidad involucrada</span>
+                            <span className="info-value">{selectedExp.entidad_involucrada}</span>
+                          </div>
+                        )}
+                        {selectedExp.fecha_hechos && (
+                          <div className="info-item">
+                            <span className="info-label">Fecha de los hechos</span>
+                            <span className="info-value">{selectedExp.fecha_hechos}</span>
+                          </div>
+                        )}
                         {selectedExp.descripcion && (
                           <div className="info-block">
-                            <h4>Descripción</h4>
+                            <h4>Descripción de los hechos</h4>
                             <p>{selectedExp.descripcion}</p>
+                          </div>
+                        )}
+                        {selectedExp.pretensiones && (
+                          <div className="info-block">
+                            <h4>Pretensiones</h4>
+                            <p>{selectedExp.pretensiones}</p>
+                          </div>
+                        )}
+                        {selectedExp.actuaciones_previas && (
+                          <div className="info-block">
+                            <h4>Actuaciones previas</h4>
+                            <p>{selectedExp.actuaciones_previas}</p>
+                          </div>
+                        )}
+                        {selectedExp.observaciones_adicionales && (
+                          <div className="info-block">
+                            <h4>Observaciones adicionales</h4>
+                            <p>{selectedExp.observaciones_adicionales}</p>
                           </div>
                         )}
                         {selectedExp.profiles && (
@@ -932,6 +993,25 @@ export default function AdminExpedientes() {
                 )}
 
                 {/* ANALISIS JURIDICO TAB */}
+                {detailTab === 'comentarios' && (
+                  <div className="detail-section">
+                    <Comentarios expedienteId={selectedExp.id} isAdmin={true} />
+                  </div>
+                )}
+
+                {detailTab === 'herramientas' && (
+                  <div className="detail-section">
+                    <HerramientasJuridicas
+                      expedienteId={selectedExp.id}
+                      expedienteTitulo={selectedExp.titulo}
+                      onAnalisisChanged={async () => {
+                        const { data } = await supabase.from('analisis_juridicos').select('*').eq('expediente_id', selectedExp.id).order('creado_en', { ascending: false });
+                        if (data) setExpAnalisis(data as AnalisisJuridico[]);
+                      }}
+                    />
+                  </div>
+                )}
+
                 {detailTab === 'analisis' && (
                   <div className="detail-section">
                     <div className="analisis-form">
