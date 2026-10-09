@@ -241,6 +241,122 @@ export async function searchExpedientes(params: SearchParams): Promise<{
 }
 
 // ============================================
+// ZIP PREVIEW & EXTRACTION (Exportaciones requeridas)
+// ============================================
+
+export async function previewZipContents(file: File): Promise<{ entries: { name: string; size: number }[]; error?: string }> {
+  try {
+    const zip = new JSZip();
+    const content = await zip.loadAsync(file);
+    const entries: { name: string; size: number }[] = [];
+    for (const filename in content.files) {
+      const entry = content.files[filename];
+      if (!entry.dir) {
+        const blob = await entry.async('blob');
+        entries.push({ name: filename, size: blob.size });
+      }
+    }
+    return { entries };
+  } catch (e) {
+    return { entries: [], error: `Error al leer ZIP: ${(e as Error).message}` };
+  }
+}
+
+export async function extractAndUploadZipFiles(
+  file: File,
+  expedienteId: string,
+  userId: string,
+  selectedFiles: string[] | null
+): Promise<{ success: number; failed: number; errors: string[] }> {
+  try {
+    const zip = new JSZip();
+    const content = await zip.loadAsync(file);
+    let success = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (const filename in content.files) {
+      const entry = content.files[filename];
+      if (entry.dir) continue;
+      if (selectedFiles && !selectedFiles.includes(filename)) continue;
+
+      const ext = getFileExtension(filename);
+      if (!ALLOWED_EXTENSIONS.includes(ext)) {
+        errors.push(`${filename}: extensión .${ext} no permitida`);
+        failed++;
+        continue;
+      }
+
+      const safeName = filename.split('/').pop() || filename;
+
+      try {
+        const blob = await entry.async('blob');
+        if (blob.size > MAX_FILE_SIZE) {
+          errors.push(`${safeName}: archivo demasiado grande`);
+          failed++;
+          continue;
+        }
+
+        const extractedFile = new File([blob], safeName, { type: blob.type || 'application/octet-stream' });
+        const result = await uploadDocument(extractedFile, expedienteId, userId);
+        if (result.success) {
+          success++;
+        } else {
+          errors.push(`${safeName}: ${result.error}`);
+          failed++;
+        }
+      } catch (e) {
+        errors.push(`${safeName}: ${(e as Error).message}`);
+        failed++;
+      }
+    }
+
+    return { success, failed, errors };
+  } catch (e) {
+    return { success: 0, failed: 1, errors: [`Error al procesar ZIP: ${(e as Error).message}`] };
+  }
+}
+
+export async function exportDocumentosToZip(
+  documentos: Documento[],
+  expedienteTitulo: string
+): Promise<{ success: boolean; error?: string }> {
+  const zip = new JSZip();
+  const usedNames = new Set<string>();
+
+  for (const doc of documentos) {
+    try {
+      const { data, error } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .createSignedUrl(doc.ruta_storage, 300);
+
+      if (error || !data) continue;
+
+      const response = await fetch(data.signedUrl);
+      if (!response.ok) continue;
+
+      const blob = await response.blob();
+      let name = doc.nombre;
+      let counter = 1;
+      while (usedNames.has(name)) {
+        const ext = getFileExtension(name);
+        const base = ext ? name.slice(0, -ext.length - 1) : name;
+        name = `${base}_${counter}.${ext}`;
+        counter++;
+      }
+      usedNames.add(name);
+      zip.file(name, blob);
+    } catch (e) {
+      // Skip
+    }
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  triggerBlobDownload(blob, sanitizeFilename(`documentos_${expedienteTitulo}.zip`));
+  return { success: true };
+}
+
+// ============================================
 // EXPORT HELPERS
 // ============================================
 
@@ -263,77 +379,4 @@ export async function exportExpedientesToXlsx(
     e.estado,
     e.profiles?.nombre_completo || ''
   ]);
-  const csv = [headers, ...rows].map((row) => row.join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  triggerBlobDownload(blob, 'expedientes.csv');
-}
-
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-export function sanitizeFilename(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_\-.]/g, '_').substring(0, 100);
-}
-
-export async function sendNotification(
-  to: string,
-  subject: string,
-  message: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-notification`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ to, subject, message }),
-      }
-    );
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      await supabase.from('notificaciones').insert({
-        destinatario: to, evento: subject, estado: 'fallida',
-        resultado: data.error || `Error ${response.status}`,
-      });
-      return { success: false, error: data.error || `Error ${response.status}` };
-    }
-
-    await supabase.from('notificaciones').insert({
-      destinatario: to, evento: subject, estado: 'enviada',
-      resultado: data.id || 'OK',
-    });
-    return { success: true };
-  } catch (e) {
-    await supabase.from('notificaciones').insert({
-      destinatario: to, evento: subject, estado: 'fallida',
-      resultado: (e as Error).message,
-    });
-    return { success: false, error: (e as Error).message };
-  }
-}
-
-export async function getAppSettings(): Promise<Record<string, string>> {
-  const { data } = await supabase.from('app_settings').select('clave, valor');
-  const map: Record<string, string> = {};
-  if (data) {
-    for (const row of data) {
-      map[row.clave] = row.valor || '';
-    }
-  }
-  return map;
-}
-
-export async function updateAppSetting(clave: string, valor: string): Promise<boolean> {
-  const { error } = await supabase.from('app_settings').update({ valor, updated_at: new Date().toISOString() }).eq('clave', clave);
-  return !error;
-}
+  const csv = [headers, ...rows].map((
