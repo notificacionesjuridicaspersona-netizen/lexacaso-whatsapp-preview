@@ -209,4 +209,4 @@ export async function searchExpedientes(params: SearchParams): Promise<{
     );
   }
 
-  dbQuery = dbQuery.order('created_at
+  dbQuery = dbQuery.order('created_at', { ascending: false }).range(offset, offset + perPage - 1);
