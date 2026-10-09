@@ -4,8 +4,9 @@ const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
 export type AIProvider = 'openai' | 'gemini' | 'local';
 
 export function getAIProvider(): AIProvider {
-  if (openaiKey) return 'openai';
-  if (geminiKey) return 'gemini';
+  // Le da prioridad a Gemini si la clave existe
+  if (geminiKey && geminiKey.trim() !== '') return 'gemini';
+  if (openaiKey && openaiKey.trim() !== '') return 'openai';
   return 'local';
 }
 
