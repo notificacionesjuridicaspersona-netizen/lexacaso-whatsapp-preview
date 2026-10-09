@@ -379,4 +379,5 @@ export async function exportExpedientesToXlsx(
     e.estado,
     e.profiles?.nombre_completo || ''
   ]);
-  const csv = [headers, ...rows].map((
+  // Línea con la falla:
+const csv = [headers, ...rows].map((
