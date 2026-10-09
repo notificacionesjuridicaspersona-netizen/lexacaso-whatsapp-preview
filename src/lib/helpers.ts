@@ -50,7 +50,7 @@ export async function logAuditoria(
 }
 
 // ============================================
-// FILE UPLOAD
+// FILE UPLOAD & VALIDATION
 // ============================================
 
 export function getFileExtension(filename: string): string {
@@ -243,7 +243,7 @@ export async function searchExpedientes(params: SearchParams): Promise<{
 }
 
 // ============================================
-// EXPORT TO DOCX
+// EXPORT TO DOCX & XLSX
 // ============================================
 
 export async function exportExpedienteToDocx(
@@ -291,39 +291,6 @@ export async function exportExpedienteToDocx(
     }
   }
 
-  if (options.incluirSeguimientos && expediente.seguimientos && expediente.seguimientos.length > 0) {
-    sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>ACTUACIONES</w:t></w:r></w:p>`);
-    for (const seg of expediente.seguimientos) {
-      sections.push(makeParagraph(`• [${seg.tipo_actuacion}] ${seg.descripcion} - ${seg.fecha_actuacion} (${seg.estado})`));
-    }
-  }
-
-  if (options.incluirObservaciones && expediente.observaciones && expediente.observaciones.length > 0) {
-    sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>OBSERVACIONES</w:t></w:r></w:p>`);
-    for (const obs of expediente.observaciones) {
-      if (obs.visible_cliente) {
-        sections.push(makeParagraph(`• ${obs.contenido} - ${new Date(obs.created_at).toLocaleDateString('es-CO')}`));
-      }
-    }
-  }
-
-  if (options.incluirHistorial && expediente.historial && expediente.historial.length > 0) {
-    sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>HISTORIAL DE CAMBIOS</w:t></w:r></w:p>`);
-    for (const h of expediente.historial) {
-      sections.push(makeParagraph(`• ${h.campo}: ${h.valor_anterior || '(vacío)'} → ${h.valor_nuevo || '(vacío)'} - ${new Date(h.created_at).toLocaleDateString('es-CO')}`));
-    }
-  }
-
-  if (options.incluirAnalisis && expediente.analisis && expediente.analisis.length > 0) {
-    sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>ANÁLISIS JURÍDICO</w:t></w:r></w:p>`);
-    for (const a of expediente.analisis) {
-      sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${escapeXml(a.titulo)} (${a.tipo})</w:t></w:r></w:p>`);
-      sections.push(makeParagraph(a.contenido));
-      if (a.resumen) sections.push(makeParagraph(`Resumen: ${a.resumen}`));
-      sections.push(makeParagraph(`Fecha: ${new Date(a.creado_en).toLocaleDateString('es-CO')}`));
-    }
-  }
-
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:body>
@@ -349,10 +316,6 @@ ${sections.join('\n')}
   const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   triggerBlobDownload(blob, sanitizeFilename(`expediente_${expediente.titulo}.docx`));
 }
-
-// ============================================
-// EXPORT TO XLSX
-// ============================================
 
 export async function exportExpedientesToXlsx(
   expedientes: (Expediente & { profiles?: Profile })[]
@@ -428,4 +391,38 @@ ${dataRows}
 <cellXfs count="1"><xf/></cellXfs>
 </styleSheet>`);
 
-  const blob = await zip.generateAsync({ type: 'blob', mimeType: '
+  const blob = await zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
+  triggerBlobDownload(blob, 'expedientes.xlsx');
+}
+
+// ============================================
+// UTILITIES
+// ============================================
+
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+export function sanitizeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_\-.]/g, '_').substring(0, 100);
+}
+
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function makeParagraph(text: string): string {
+  return `<w:p><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
+}
