@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getAppSettings, logAuditoria } from '../../lib/helpers';
+import { isAIConfigured, runAI } from '../../lib/ai';
 import type { AnalisisJuridico } from '../../types';
 
 interface HerramientasJuridicasProps {
@@ -52,26 +53,55 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
     })();
   }, [expedienteId]);
 
-  const aiConfigured = settings.ai_service_configured === 'true';
+  const aiConfigured = isAIConfigured() || settings.ai_service_configured === 'true';
   const jurisprudenciaConfigured = settings.jurisprudencia_service_configured === 'true';
 
   const isToolEnabled = (key: string) => settings[key] !== 'false';
 
   const handleRunTool = async (tool: ToolDef) => {
     if (!aiConfigured) {
-      setError(`El servicio de IA no está configurado. Para usar "${tool.label}" automáticamente, debe configurar una API de IA en el servidor.`);
+      setError(`El servicio de IA no está configurado. Para usar "${tool.label}" automáticamente, debe configurar una API de IA (VITE_OPENAI_API_KEY o VITE_GEMINI_API_KEY).`);
       return;
     }
     setRunning(true);
     setError(null);
     try {
-      // In a real implementation, this would call an edge function with the IA API
-      // For now, we save a placeholder indicating the tool was run
+      const { data: docs } = await supabase
+        .from('documentos')
+        .select('nombre, extension')
+        .eq('expediente_id', expedienteId);
+
+      const { data: exp } = await supabase
+        .from('expedientes')
+        .select('titulo, descripcion, area_juridica, estado, pretensiones, actuaciones_previas, observaciones_adicionales')
+        .eq('id', expedienteId)
+        .single();
+
+      const contextParts: string[] = [];
+      if (exp) {
+        contextParts.push(`Título: ${exp.titulo}`);
+        if (exp.descripcion) contextParts.push(`Descripción: ${exp.descripcion}`);
+        if (exp.area_juridica) contextParts.push(`Área jurídica: ${exp.area_juridica}`);
+        if (exp.pretensiones) contextParts.push(`Pretensiones: ${exp.pretensiones}`);
+        if (exp.actuaciones_previas) contextParts.push(`Actuaciones previas: ${exp.actuaciones_previas}`);
+        if (exp.observaciones_adicionales) contextParts.push(`Observaciones: ${exp.observaciones_adicionales}`);
+      }
+      if (docs && docs.length > 0) {
+        contextParts.push(`Documentos: ${docs.map((d) => d.nombre).join(', ')}`);
+      }
+      const context = contextParts.join('\n');
+
+      const result = await runAI(tool.prompt, context);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
       const { error: insertError } = await supabase.from('analisis_juridicos').insert({
         expediente_id: expedienteId,
         tipo: 'ia',
         titulo: tool.label,
-        contenido: `[Resultado de IA - ${tool.label}]\n\n${tool.prompt}\n\nNota: Este análisis fue generado con el servicio de IA configurado. Revise y valide el contenido antes de usarlo.`,
+        contenido: result.content,
       });
       if (insertError) throw new Error(insertError.message);
       await logAuditoria('ejecutar_herramienta_ia', `Herramienta: ${tool.label} en expediente: ${expedienteTitulo}`, 'analisis', null);

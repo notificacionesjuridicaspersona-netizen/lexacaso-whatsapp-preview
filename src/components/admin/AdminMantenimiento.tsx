@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getAppSettings, updateAppSetting, logAuditoria } from '../../lib/helpers';
 import { sendNotification } from '../../lib/helpers';
+import { isAIConfigured, getAIProvider } from '../../lib/ai';
 import type { Notificacion, AppSetting } from '../../types';
 
 type MaintTab = 'herramientas' | 'general' | 'notificaciones' | 'servicios';
@@ -88,7 +89,8 @@ export default function AdminMantenimiento() {
     loadData();
   };
 
-  const aiConfigured = settings.ai_service_configured === 'true';
+  const aiConfigured = isAIConfigured() || settings.ai_service_configured === 'true';
+  const aiProviderName = getAIProvider() === 'openai' ? 'OpenAI' : getAIProvider() === 'gemini' ? 'Gemini' : null;
   const ocrConfigured = settings.ocr_service_configured === 'true';
   const jurisConfigured = settings.jurisprudencia_service_configured === 'true';
 
@@ -163,7 +165,7 @@ export default function AdminMantenimiento() {
                 <div className="config-item">
                   <div>
                     <strong>Inteligencia Artificial</strong>
-                    <span className="config-desc">Permite análisis automáticos, resúmenes y borradores generados por IA.</span>
+                    <span className="config-desc">Permite análisis automáticos, resúmenes y borradores generados por IA. {aiConfigured && aiProviderName ? `Proveedor activo: ${aiProviderName}.` : ''}</span>
                   </div>
                   <span className={`badge ${aiConfigured ? 'badge-green' : 'badge-orange'}`}>
                     {aiConfigured ? 'Configurado' : 'No configurado'}
@@ -191,7 +193,7 @@ export default function AdminMantenimiento() {
               <div className="service-setup-info">
                 <h4>Cómo configurar los servicios</h4>
                 <ul>
-                  <li><strong>IA:</strong> Agregar la variable de entorno <code>AI_API_KEY</code> en el servidor con la clave de un proveedor de IA (OpenAI, Anthropic, etc.). Crear una función de borde que la utilice.</li>
+                  <li><strong>IA:</strong> Agregar la variable de entorno <code>VITE_OPENAI_API_KEY</code> o <code>VITE_GEMINI_API_KEY</code> para habilitar el modo automático. El sistema detecta automáticamente cuál está configurada.</li>
                   <li><strong>OCR:</strong> Agregar <code>OCR_API_KEY</code> con un proveedor como Google Vision o Tesseract en una función de borde.</li>
                   <li><strong>Jurisprudencia:</strong> Configurar acceso a una base de datos de jurisprudencia colombiana mediante una API o función de borde.</li>
                 </ul>

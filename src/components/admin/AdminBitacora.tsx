@@ -13,11 +13,44 @@ export default function AdminBitacora() {
     setError(null);
     const { data, error } = await supabase
       .from('bitacora_auditoria')
-      .select('*, autor:profiles!bitacora_auditoria_autor_id_fkey(nombre_completo, email)')
+      .select('*, autor:profiles!bitacora_auditoria_autor_id_profiles_fkey(nombre_completo, email)')
       .order('created_at', { ascending: false })
       .limit(200);
+
     if (error) {
-      setError(error.message);
+      // Fallback: query without join, then resolve autor names separately
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('bitacora_auditoria')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (fallbackError) {
+        setError(fallbackError.message);
+        setLoading(false);
+        return;
+      }
+
+      const rows = fallbackData as BitacoraEntry[];
+      const autorIds = [...new Set(rows.map((r) => r.autor_id).filter(Boolean))] as string[];
+      const profileMap = new Map<string, { nombre_completo: string; email: string }>();
+
+      if (autorIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, nombre_completo, email')
+          .in('id', autorIds);
+        if (profilesData) {
+          for (const p of profilesData) {
+            profileMap.set(p.id, { nombre_completo: p.nombre_completo, email: p.email });
+          }
+        }
+      }
+
+      setEntries(rows.map((r) => ({
+        ...r,
+        autor: r.autor_id ? profileMap.get(r.autor_id) : undefined,
+      })) as BitacoraEntry[]);
     } else {
       setEntries(data as BitacoraEntry[]);
     }
