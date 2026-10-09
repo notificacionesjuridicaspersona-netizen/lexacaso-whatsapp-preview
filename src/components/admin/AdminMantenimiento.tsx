@@ -90,7 +90,7 @@ export default function AdminMantenimiento() {
   };
 
   const aiConfigured = isAIConfigured() || settings.ai_service_configured === 'true';
-  const aiProviderName = getAIProvider() === 'openai' ? 'OpenAI' : getAIProvider() === 'gemini' ? 'Gemini' : 'Interno';
+  const aiProviderName = getAIProvider() === 'openai' ? 'OpenAI' : getAIProvider() === 'gemini' ? 'Gemini' : 'Local (sin API externa)';
   const ocrConfigured = isAIConfigured() || settings.ocr_service_configured === 'true';
   const jurisConfigured = isAIConfigured() || settings.jurisprudencia_service_configured === 'true';
 

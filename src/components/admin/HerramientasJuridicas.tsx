@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getAppSettings, logAuditoria } from '../../lib/helpers';
-import { isAIConfigured, runAI } from '../../lib/ai';
+import { runAI } from '../../lib/ai';
 import { extractExpedienteDocumentText, buildContextWithDocuments } from '../../lib/document-extract';
 import type { AnalisisJuridico } from '../../types';
 
@@ -56,8 +56,8 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
     })();
   }, [expedienteId]);
 
-  const aiConfigured = isAIConfigured() || settings.ai_service_configured === 'true';
-  const jurisprudenciaConfigured = isAIConfigured() || settings.jurisprudencia_service_configured === 'true';
+  const aiConfigured = true;
+  const jurisprudenciaConfigured = true;
 
   const isToolEnabled = (key: string) => settings[key] !== 'false';
 
@@ -183,11 +183,9 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
                   <span className="badge badge-orange">Requiere configuración</span>
                 ) : (
                   <>
-                    {aiConfigured && (
-                      <button className="btn btn-primary btn-sm" onClick={() => handleRunTool(tool)} disabled={running}>
-                        {running ? 'Procesando…' : 'Ejecutar IA'}
-                      </button>
-                    )}
+                    <button className="btn btn-primary btn-sm" onClick={() => handleRunTool(tool)} disabled={running}>
+                      {running ? 'Procesando…' : 'Ejecutar IA'}
+                    </button>
                     <button className="btn btn-secondary btn-sm" onClick={() => handleOpenManual(tool)}>
                       Manual
                     </button>
