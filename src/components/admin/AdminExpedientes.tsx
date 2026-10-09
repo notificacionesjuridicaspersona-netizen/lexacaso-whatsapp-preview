@@ -226,7 +226,7 @@ export default function AdminExpedientes() {
         estado: newExp.estado,
         prioridad: newExp.prioridad,
       })
-      .select('*, profiles!expedientes_user_id_fkey(*)')
+      .select('*, profiles!expedientes_user_id_profiles_fkey(*)')
       .single();
 
     if (error) {

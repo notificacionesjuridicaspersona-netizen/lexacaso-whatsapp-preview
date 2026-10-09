@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './context/AuthContext';
-import AuthPage from './components/auth/AuthPage';
+import LandingPage from './components/landing/LandingPage';
 import AdminDashboard from './components/admin/AdminDashboard';
 import AdminExpedientes from './components/admin/AdminExpedientes';
 import AdminUsuarios from './components/admin/AdminUsuarios';
@@ -45,7 +45,7 @@ export default function App() {
   }
 
   if (!profile) {
-    return <AuthPage />;
+    return <LandingPage onIngresar={() => {}} />;
   }
 
   const isAdmin = profile.rol === 'admin';

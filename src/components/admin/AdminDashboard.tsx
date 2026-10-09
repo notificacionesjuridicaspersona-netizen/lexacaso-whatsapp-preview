@@ -26,7 +26,7 @@ export default function AdminDashboard({ onNavigate }: AdminDashboardProps) {
         supabase.from('expedientes').select('*', { count: 'exact', head: false }),
         supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('rol', 'cliente'),
         supabase.from('documentos').select('*', { count: 'exact', head: true }),
-        supabase.from('expedientes').select('*, profiles!expedientes_user_id_fkey(*)').order('created_at', { ascending: false }).limit(5),
+        supabase.from('expedientes').select('*, profiles!expedientes_user_id_profiles_fkey(*)').order('created_at', { ascending: false }).limit(5),
       ]);
 
       if (expRes.error) throw new Error(expRes.error.message);

@@ -160,7 +160,7 @@ export async function searchExpedientes(params: SearchParams): Promise<{
 
   let dbQuery = supabase
     .from('expedientes')
-    .select('*, profiles!expedientes_user_id_fkey(*)', { count: 'exact' });
+    .select('*, profiles!expedientes_user_id_profiles_fkey(*)', { count: 'exact' });
 
   if (clienteId) {
     dbQuery = dbQuery.eq('user_id', clienteId);
@@ -203,7 +203,7 @@ export async function searchExpedientes(params: SearchParams): Promise<{
       const matchingIds = matchingProfiles.map((p) => p.id);
       const { data: clientExpedientes } = await supabase
         .from('expedientes')
-        .select('*, profiles!expedientes_user_id_fkey(*)')
+        .select('*, profiles!expedientes_user_id_profiles_fkey(*)')
         .in('user_id', matchingIds)
         .order('created_at', { ascending: false });
 
