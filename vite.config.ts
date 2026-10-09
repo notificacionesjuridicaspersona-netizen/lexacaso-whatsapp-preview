@@ -1,3 +1,10 @@
-VITE_OPENAI_API_KEY=tu_clave_de_openai
-# O si usas Gemini:
-# VITE_GEMINI_API_KEY=tu_clave_de_gemini
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  optimizeDeps: {
+    exclude: ['lucide-react'],
+  },
+});
