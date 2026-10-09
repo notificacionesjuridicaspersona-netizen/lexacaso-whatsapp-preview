@@ -241,7 +241,7 @@ export async function searchExpedientes(params: SearchParams): Promise<{
 }
 
 // ============================================
-// EXPORTING HELPERS
+// EXPORT HELPERS
 // ============================================
 
 export async function exportExpedienteToDocx(
@@ -272,4 +272,68 @@ export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+export function sanitizeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_\-.]/g, '_').substring(0, 100);
+}
+
+export async function sendNotification(
+  to: string,
+  subject: string,
+  message: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-notification`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ to, subject, message }),
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      await supabase.from('notificaciones').insert({
+        destinatario: to, evento: subject, estado: 'fallida',
+        resultado: data.error || `Error ${response.status}`,
+      });
+      return { success: false, error: data.error || `Error ${response.status}` };
+    }
+
+    await supabase.from('notificaciones').insert({
+      destinatario: to, evento: subject, estado: 'enviada',
+      resultado: data.id || 'OK',
+    });
+    return { success: true };
+  } catch (e) {
+    await supabase.from('notificaciones').insert({
+      destinatario: to, evento: subject, estado: 'fallida',
+      resultado: (e as Error).message,
+    });
+    return { success: false, error: (e as Error).message };
+  }
+}
+
+export async function getAppSettings(): Promise<Record<string, string>> {
+  const { data } = await supabase.from('app_settings').select('clave, valor');
+  const map: Record<string, string> = {};
+  if (data) {
+    for (const row of data) {
+      map[row.clave] = row.valor || '';
+    }
+  }
+  return map;
+}
+
+export async function updateAppSetting(clave: string, valor: string): Promise<boolean> {
+  const { error } = await supabase.from('app_settings').update({ valor, updated_at: new Date().toISOString() }).eq('clave', clave);
+  return !error;
+}
