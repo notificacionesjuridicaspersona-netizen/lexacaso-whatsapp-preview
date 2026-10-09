@@ -1,10 +1,3 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    host: true,
-    port: 5173
-  }
-})
+VITE_OPENAI_API_KEY=tu_clave_de_openai
+# O si usas Gemini:
+# VITE_GEMINI_API_KEY=tu_clave_de_gemini
