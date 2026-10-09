@@ -77,12 +77,10 @@ export default function AdminMantenimiento() {
     }
   };
 
-  // Detección directa de la API Key de Gemini
-const hasGeminiKey = Boolean(import.meta.env.VITE_GEMINI_API_KEY);
-const aiConfigured = hasGeminiKey || isAIConfigured() || settings.ai_service_configured === 'true';
-const aiProviderName = hasGeminiKey ? 'Gemini (Google AI)' : getAIProvider() === 'openai' ? 'OpenAI' : 'Local (sin API externa)';
-const ocrConfigured = true; // Activo mediante Tesseract.js local
-const jurisConfigured = isAIConfigured() || settings.jurisprudencia_service_configured === 'true';
+  const testNotification = async () => {
+    setError(null);
+    setSuccess(null);
+    const result = await sendNotification(adminEmail, 'Prueba de notificación LEXACASO', 'Esta es una notificación de prueba del sistema LEXACASO.');
     if (result.success) {
       setSuccess('Notificación enviada correctamente.');
     } else {
@@ -91,9 +89,11 @@ const jurisConfigured = isAIConfigured() || settings.jurisprudencia_service_conf
     loadData();
   };
 
-  const aiConfigured = isAIConfigured() || settings.ai_service_configured === 'true';
-  const aiProviderName = getAIProvider() === 'openai' ? 'OpenAI' : getAIProvider() === 'gemini' ? 'Gemini' : 'Local (sin API externa)';
-  const ocrConfigured = isAIConfigured() || settings.ocr_service_configured === 'true';
+  // Detección directa de la API Key de Gemini y OCR local
+  const hasGeminiKey = Boolean(import.meta.env.VITE_GEMINI_API_KEY);
+  const aiConfigured = hasGeminiKey || isAIConfigured() || settings.ai_service_configured === 'true';
+  const aiProviderName = hasGeminiKey ? 'Gemini (Google AI)' : getAIProvider() === 'openai' ? 'OpenAI' : 'Local (sin API externa)';
+  const ocrConfigured = true; // Habilitado mediante Tesseract.js en el navegador
   const jurisConfigured = isAIConfigured() || settings.jurisprudencia_service_configured === 'true';
 
   return (
