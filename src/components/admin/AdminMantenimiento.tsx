@@ -77,10 +77,12 @@ export default function AdminMantenimiento() {
     }
   };
 
-  const testNotification = async () => {
-    setError(null);
-    setSuccess(null);
-    const result = await sendNotification(adminEmail, 'Prueba de notificación LEXACASO', 'Esta es una notificación de prueba del sistema LEXACASO.');
+  // Detección directa de la API Key de Gemini
+const hasGeminiKey = Boolean(import.meta.env.VITE_GEMINI_API_KEY);
+const aiConfigured = hasGeminiKey || isAIConfigured() || settings.ai_service_configured === 'true';
+const aiProviderName = hasGeminiKey ? 'Gemini (Google AI)' : getAIProvider() === 'openai' ? 'OpenAI' : 'Local (sin API externa)';
+const ocrConfigured = true; // Activo mediante Tesseract.js local
+const jurisConfigured = isAIConfigured() || settings.jurisprudencia_service_configured === 'true';
     if (result.success) {
       setSuccess('Notificación enviada correctamente.');
     } else {
