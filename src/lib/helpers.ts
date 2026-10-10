@@ -2,25 +2,56 @@ import { supabase, STORAGE_BUCKET, ALLOWED_EXTENSIONS, MAX_FILE_SIZE } from './s
 import type { Expediente, Documento, Profile } from '../types';
 import JSZip from 'jszip';
 import Tesseract from 'tesseract.js';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Configurar Worker de PDF.js desde CDN
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 // ============================================
-// OCR AUTOMÁTICO (Extracción de Escaneos y CamScanner)
+// OCR AUTOMÁTICO (Extracción de Escaneos, PDFs e Imágenes)
 // ============================================
 
 export async function extraerTextoDeArchivo(file: File): Promise<string> {
   try {
-    let texto = await file.text().catch(() => '');
-    const textoLimpio = texto.replace(/[^\x20-\x7E\xA0-\xFF\n\r]/g, '').trim();
+    let textoExtraido = '';
 
-    if (!textoLimpio || textoLimpio.length < 30) {
-      console.log('Documento escaneado detectado. Iniciando OCR automático con Tesseract...');
+    // Si es un archivo PDF (escaneado o nativo)
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+      for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const textPage = textContent.items.map((item: any) => item.str).join(' ');
+
+        if (textPage.trim().length > 30) {
+          textoExtraido += `\n--- Página ${i} ---\n` + textPage;
+        } else {
+          // Si la página es una imagen escaneada (p. ej. CamScanner), renderizar Canvas y ejecutar Tesseract.js
+          console.log(`Página ${i} escaneada detectada. Ejecutando OCR con Tesseract.js...`);
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          if (context) {
+            await page.render({ canvasContext: context, viewport }).promise;
+            const result = await Tesseract.recognize(canvas, 'spa');
+            textoExtraido += `\n--- Página ${i} (OCR) ---\n` + result.data.text;
+          }
+        }
+      }
+    } else {
+      // Si es una imagen (.png, .jpg, .jpeg)
       const result = await Tesseract.recognize(file, 'spa', {
         logger: (m) => console.log(`[OCR] ${m.status}: ${Math.round((m.progress || 0) * 100)}%`),
       });
-      texto = result.data.text;
+      textoExtraido = result.data.text;
     }
 
-    return texto;
+    return textoExtraido.trim();
   } catch (e) {
     console.error('Error al procesar el archivo con OCR:', e);
     return '';
