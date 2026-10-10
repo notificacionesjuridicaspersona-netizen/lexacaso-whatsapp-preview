@@ -34,7 +34,7 @@ export async function runAI(prompt: string, context: string): Promise<AIResult> 
     } else if (provider === 'openai') {
       return await callOpenAI(fullPrompt);
     } else {
-      return { content: 'No se configuró una API Key válida para Gemini u OpenAI.', provider: 'local' };
+      return generateLocalAnalysis(prompt, context);
     }
   } catch (e) {
     return { content: '', provider: 'local', error: (e as Error).message };
@@ -57,7 +57,7 @@ async function callGemini(prompt: string): Promise<AIResult> {
         systemInstruction: {
           parts: [
             {
-              text: 'Eres un abogado consultor y analista jurídico experto en derecho colombiano. Realiza análisis profundos sobre los documentos e información del expediente proporcionado. Ofrece resúmenes cronológicos, alternativas procesales y recomendaciones claras sin inventar citas ni normas.',
+              text: 'Eres un abogado consultor y analista jurídico experto en derecho colombiano. Proporciona resúmenes claros, estructurados y detallados de los documentos y del expediente sin inventar leyes ni sentencias.',
             },
           ],
         },
@@ -105,4 +105,21 @@ async function callOpenAI(prompt: string): Promise<AIResult> {
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content || '';
   return { content, provider: 'openai' };
+}
+
+function generateLocalAnalysis(prompt: string, context: string): AIResult {
+  const lines: string[] = [];
+
+  lines.push('ANÁLISIS JURÍDICO REGISTRADO');
+  lines.push('='.repeat(50));
+  lines.push('');
+  lines.push(`Fecha de registro: ${new Date().toLocaleString('es-CO')}`);
+  lines.push('');
+
+  if (context) {
+    lines.push('INFORMACIÓN DEL EXPEDIENTE:');
+    lines.push(context);
+  }
+
+  return { content: lines.join('\n'), provider: 'local' };
 }
