@@ -1,38 +1,53 @@
 import React, { useState } from 'react';
-import { supabase } from '../../lib/supabase';
+import { supabase, STORAGE_BUCKET } from '../../lib/supabase';
 import { extraerTextoDeArchivo } from '../../lib/helpers';
+import { runAI } from '../../lib/ai';
 
 interface DocumentoLocal {
   id: string;
   nombre: string;
+  ruta_storage?: string;
+  contenido_texto?: string;
+  tipo_mime?: string;
   file?: File;
 }
 
 interface AnalisisIAProps {
   expedienteId?: string;
+  expedienteDatos?: {
+    titulo?: string;
+    descripcion?: string;
+    area_juridica?: string;
+    pretensiones?: string;
+    actuaciones_previas?: string;
+    observaciones?: string;
+  };
   documentos: DocumentoLocal[];
   onGuardarResultado?: (resultado: string) => void;
 }
 
-export const AnalisisIA: React.FC<AnalisisIAProps> = ({ expedienteId, documentos, onGuardarResultado }) => {
+export const AnalisisIA: React.FC<AnalisisIAProps> = ({
+  expedienteId,
+  expedienteDatos,
+  documentos,
+  onGuardarResultado,
+}) => {
   const [cargando, setCargando] = useState(false);
   const [herramientaEnProceso, setHerramientaEnProceso] = useState<string | null>(null);
   const [resultado, setResultado] = useState<string>('');
 
-  // Estado para el Modal Manual
+  // Modal Manual
   const [modalManualOpen, setModalManualOpen] = useState(false);
   const [tipoManual, setTipoManual] = useState('');
   const [textoManual, setTextoManual] = useState('');
   const [guardandoManual, setGuardandoManual] = useState(false);
 
-  // Abrir Modal Manual
   const abrirModalManual = (tipo: string) => {
     setTipoManual(tipo);
     setTextoManual('');
     setModalManualOpen(true);
   };
 
-  // Guardar Análisis Manual en Supabase
   const guardarAnalisisManual = async () => {
     if (!textoManual.trim()) return;
     setGuardandoManual(true);
@@ -44,7 +59,7 @@ export const AnalisisIA: React.FC<AnalisisIAProps> = ({ expedienteId, documentos
           tipo: tipoManual,
           titulo: tipoManual,
           contenido: textoManual,
-          es_manual: true
+          es_manual: true,
         });
       }
 
@@ -59,90 +74,79 @@ export const AnalisisIA: React.FC<AnalisisIAProps> = ({ expedienteId, documentos
     }
   };
 
-  // Ejecutar Análisis con Gemini API y OCR
   const ejecutarAnalisisIA = async (tipoAnalisis: string) => {
-    if (!documentos || documentos.length === 0) {
-      setResultado('No hay documentos cargados en el expediente para analizar.');
-      return;
-    }
-
     setCargando(true);
     setHerramientaEnProceso(tipoAnalisis);
-    setResultado('Procesando extracción OCR y consultando a Google Gemini...');
+    setResultado('Extrayendo contenido de documentos con OCR y conectando con IA...');
 
     try {
-      let textoConsolidado = '';
+      let textoDocumentos = '';
 
       for (const doc of documentos) {
-        if (doc.file) {
-          const textoExtraido = await extraerTextoDeArchivo(doc.file);
-          if (textoExtraido.trim()) {
-            textoConsolidado += `\n--- DOCUMENTO: ${doc.nombre} ---\n${textoExtraido}\n`;
+        let textoDoc = doc.contenido_texto || '';
+
+        // Si el texto está vacío o contiene la plantilla antigua de aviso, forzar la re-extracción OCR
+        if (
+          !textoDoc ||
+          textoDoc.includes('Pendiente de configurar') ||
+          textoDoc.includes('PDF escaneado')
+        ) {
+          if (doc.file) {
+            textoDoc = await extraerTextoDeArchivo(doc.file);
+          } else if (doc.ruta_storage) {
+            const { data } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(doc.ruta_storage, 60);
+            if (data?.signedUrl) {
+              const resp = await fetch(data.signedUrl);
+              const blob = await resp.blob();
+              const file = new File([blob], doc.nombre, { type: doc.tipo_mime || 'application/pdf' });
+              textoDoc = await extraerTextoDeArchivo(file);
+
+              // Actualizar en Supabase para no repetir OCR
+              if (textoDoc.trim()) {
+                await supabase.from('documentos').update({ contenido_texto: textoDoc }).eq('id', doc.id);
+              }
+            }
           }
         }
+
+        textoDocumentos += `\n--- DOCUMENTO: ${doc.nombre} ---\n${textoDoc.trim() || '(No se pudo extraer texto legible del documento)'}\n`;
       }
 
-      if (!textoConsolidado.trim()) {
-        setResultado('No se pudo extraer texto legible de los documentos.');
-        setCargando(false);
-        setHerramientaEnProceso(null);
-        return;
-      }
+      // Preparar contexto completo
+      const contexto = `
+INFORMACIÓN DEL EXPEDIENTE:
+Título: ${expedienteDatos?.titulo || 'N/A'}
+Área Jurídica: ${expedienteDatos?.area_juridica || 'N/A'}
+Descripción: ${expedienteDatos?.descripcion || 'N/A'}
+Pretensiones: ${expedienteDatos?.pretensiones || 'N/A'}
+Actuaciones previas: ${expedienteDatos?.actuaciones_previas || 'N/A'}
 
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        setResultado('Error: La variable VITE_GEMINI_API_KEY no está configurada.');
-        setCargando(false);
-        setHerramientaEnProceso(null);
-        return;
-      }
+CONTENIDO DE LOS DOCUMENTOS DEL EXPEDIENTE:
+${textoDocumentos}
+`;
 
-      const prompt = `Actúa como un abogado consultor y analista jurídico experto.
+      const aiResponse = await runAI(tipoAnalisis, contexto);
 
-Analiza la información de los siguientes documentos extraídos de un expediente.
+      if (aiResponse.error) {
+        setResultado(`Error al consultar IA: ${aiResponse.error}`);
+      } else {
+        setResultado(aiResponse.content);
 
-INSTRUCCIONES:
-1. SÍNTESIS INICIAL: Resume brevemente el objeto del documento/expediente.
-2. ANÁLISIS ESPECÍFICO: Desarrolla a profundidad el requerimiento de: "${tipoAnalisis}".
-3. CONCLUSIONES Y RECOMENDACIONES: Ofrece recomendaciones procesales claras.
-
-DOCUMENTOS EXTRAÍDOS:
-${textoConsolidado}`;
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
-          })
+        if (expedienteId) {
+          await supabase.from('analisis_expediente').insert({
+            expediente_id: expedienteId,
+            tipo: tipoAnalisis,
+            titulo: tipoAnalisis,
+            contenido: aiResponse.content,
+            es_manual: false,
+          });
         }
-      );
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error?.message || `Error ${response.status} en la API de Gemini`);
+        if (onGuardarResultado) onGuardarResultado(aiResponse.content);
       }
-
-      const respuestaTexto = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta de Gemini.';
-      
-      setResultado(respuestaTexto);
-
-      if (expedienteId) {
-        await supabase.from('analisis_expediente').insert({
-          expediente_id: expedienteId,
-          tipo: tipoAnalisis,
-          titulo: tipoAnalisis,
-          contenido: respuestaTexto,
-          es_manual: false
-        });
-      }
-
-      if (onGuardarResultado) onGuardarResultado(respuestaTexto);
     } catch (e) {
       console.error(e);
-      setResultado(`Error al ejecutar el análisis: ${(e as Error).message}`);
+      setResultado(`Error durante la ejecución del análisis: ${(e as Error).message}`);
     } finally {
       setCargando(false);
       setHerramientaEnProceso(null);
@@ -158,7 +162,7 @@ ${textoConsolidado}`;
     { key: 'tool_alternativas', label: 'Evaluar alternativas de solución' },
     { key: 'tool_terminos_plazos', label: 'Identificar términos y plazos' },
     { key: 'tool_pruebas_faltantes', label: 'Detectar pruebas faltantes' },
-    { key: 'tool_estrategias', label: 'Proponer estrategias jurídicas' }
+    { key: 'tool_estrategias', label: 'Proponer estrategias jurídicas' },
   ];
 
   return (
