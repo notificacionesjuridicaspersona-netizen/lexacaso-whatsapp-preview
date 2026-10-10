@@ -1,5 +1,11 @@
 export type AIProvider = 'openai' | 'gemini' | 'local';
 
+export interface AIResult {
+  content: string;
+  provider: AIProvider;
+  error?: string;
+}
+
 const LEGAL_SYSTEM_PROMPT = `
 Eres un asistente de análisis jurídico y administrativo especializado en el ordenamiento jurídico colombiano.
 
@@ -34,13 +40,7 @@ export function isAIConfigured(): boolean {
   return provider === 'gemini' || provider === 'openai';
 }
 
-export interface AIResult {
-  content: string;
-  provider: AIProvider;
-  error?: string;
-}
-
-export async function runAI(prompt: string, context: string): Promise<AIResult> {
+export async function runAI(prompt: string, context: string = ''): Promise<AIResult> {
   const provider = getAIProvider();
 
   const fullPrompt = context
@@ -59,16 +59,16 @@ export async function runAI(prompt: string, context: string): Promise<AIResult> 
     return { 
       content: '', 
       provider: 'local', 
-      error: (e as Error).message || 'Error desconocido al procesar la solicitud de IA.' 
+      error: (e as Error).message || 'Error al procesar la solicitud.' 
     };
   }
 }
 
-async function callGemini(prompt: string): Promise<AIResult> {
+export async function callGemini(prompt: string): Promise<AIResult> {
   const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
   if (!geminiKey || geminiKey.trim() === '') {
-    throw new Error('VITE_GEMINI_API_KEY no está configurada.');
+    throw new Error('VITE_GEMINI_API_KEY no configurada.');
   }
 
   const res = await fetch(
@@ -105,11 +105,11 @@ async function callGemini(prompt: string): Promise<AIResult> {
   return { content, provider: 'gemini' };
 }
 
-async function callOpenAI(prompt: string): Promise<AIResult> {
+export async function callOpenAI(prompt: string): Promise<AIResult> {
   const openaiKey = import.meta.env.VITE_OPENAI_API_KEY;
 
   if (!openaiKey || openaiKey.trim() === '') {
-    throw new Error('VITE_OPENAI_API_KEY no está configurada.');
+    throw new Error('VITE_OPENAI_API_KEY no configurada.');
   }
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -150,4 +150,20 @@ function generateLocalAnalysis(prompt: string, context: string): AIResult {
 
   lines.push('ANÁLISIS JURÍDICO REGISTRADO (MODO LOCAL)');
   lines.push('='.repeat(50));
-  lines
+  lines.push('');
+  lines.push(`Fecha: ${new Date().toLocaleString('es-CO')}`);
+  lines.push('');
+
+  if (context) {
+    lines.push('INFORMACIÓN REGISTRADA EN EL EXPEDIENTE:');
+    lines.push(context);
+    lines.push('');
+  }
+
+  lines.push('INSTRUCCIÓN:');
+  lines.push(prompt);
+  lines.push('');
+  lines.push('Nota: Configura VITE_GEMINI_API_KEY para habilitar la IA en vivo.');
+
+  return { content: lines.join('\n'), provider: 'local' };
+}
