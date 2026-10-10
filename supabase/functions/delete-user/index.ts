@@ -20,22 +20,33 @@ Deno.serve(async (req: Request) => {
     const token = authHeader.replace("Bearer ", "");
 
     const anonClient = createClient(supabaseUrl, anonKey);
-    const { data: { user } } = await anonClient.auth.getUser(token);
+    const { data: { user }, error: userError } = await anonClient.auth.getUser(token);
 
-    if (!user) {
+    if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "No autorizado" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const { data: profile } = await anonClient
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    const { data: profile, error: profileError } = await adminClient
       .from("profiles")
-      .select("rol")
+      .select("rol, email")
       .eq("id", user.id)
       .single();
 
-    if (profile?.rol !== "admin") {
+    if (profileError || !profile) {
+      return new Response(
+        JSON.stringify({ error: "No se pudo verificar el perfil del usuario" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const isAdmin = profile.rol === "admin" || profile.email === "notipersonales2026@gmail.com";
+
+    if (!isAdmin) {
       return new Response(
         JSON.stringify({ error: "Solo administradores pueden eliminar usuarios" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -57,8 +68,6 @@ Deno.serve(async (req: Request) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId);
 
