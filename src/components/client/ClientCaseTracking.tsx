@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { downloadDocument, formatBytes } from '../../lib/helpers';
+import { downloadDocument, deleteDocument, formatBytes } from '../../lib/helpers';
 import type { Expediente, Documento, Seguimiento, Observacion, AnalisisJuridico } from '../../types';
 import Comentarios from '../shared/Comentarios';
 import Modal from '../ui/Modal';
@@ -115,7 +115,16 @@ export default function ClientCaseTracking({ expediente, onClose }: ClientCaseTr
                           <span className="doc-meta">{formatBytes(doc.tamano_bytes)} · {doc.extension?.toUpperCase()} · {new Date(doc.created_at).toLocaleDateString('es-CO')}</span>
                           {doc.mensaje_admin && <span className="doc-message">Mensaje: {doc.mensaje_admin}</span>}
                         </div>
-                        <button className="btn btn-secondary btn-sm" onClick={() => handleDownload(doc)}>Descargar</button>
+                        <div className="doc-actions">
+                          <button className="btn btn-secondary btn-sm" onClick={() => handleDownload(doc)}>Descargar</button>
+                          <button className="btn-icon btn-danger" title="Eliminar documento" onClick={async () => {
+                            if (!confirm(`¿Eliminar el documento "${doc.nombre}"? Esta acción no se puede deshacer.`)) return;
+                            const result = await deleteDocument(doc);
+                            if (result.success) {
+                              setDocumentos(documentos.filter((d) => d.id !== doc.id));
+                            }
+                          }}>Eliminar</button>
+                        </div>
                       </div>
                     ))}
                   </div>

@@ -1,4 +1,5 @@
 import { supabase, STORAGE_BUCKET } from './supabase';
+import { extraerTextoDeArchivo } from './helpers';
 import JSZip from 'jszip';
 import type { Documento } from '../types';
 
@@ -68,7 +69,8 @@ export async function extractExpedienteDocumentText(expedienteId: string): Promi
           metodo: 'directo',
         });
       } else if (ext === 'pdf') {
-        const text = await extractPdfText(await response.blob());
+        const blob = await response.blob();
+        const text = await extractPdfText(blob);
         if (text) {
           resultados.push({
             nombre: doc.nombre,
@@ -77,19 +79,24 @@ export async function extractExpedienteDocumentText(expedienteId: string): Promi
             metodo: 'pdf',
           });
         } else {
+          const file = new File([blob], doc.nombre, { type: 'application/pdf' });
+          const ocrText = await extraerTextoDeArchivo(file);
           resultados.push({
             nombre: doc.nombre,
             extension: ext,
-            contenido: '[PDF escaneado o sin texto embebido. Requiere OCR para extraer el contenido. Pendiente de configurar servicio OCR avanzado.]',
-            metodo: 'ocr-pendiente',
+            contenido: ocrText.substring(0, MAX_DOC_CHARS) || '[No se pudo extraer texto del documento PDF.]',
+            metodo: ocrText ? 'directo' : 'ocr-pendiente',
           });
         }
       } else if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) {
+        const blob = await response.blob();
+        const file = new File([blob], doc.nombre, { type: doc.tipo_mime || 'image/jpeg' });
+        const ocrText = await extraerTextoDeArchivo(file);
         resultados.push({
           nombre: doc.nombre,
           extension: ext,
-          contenido: '[Imagen. El reconocimiento de texto en imágenes (OCR) está identificado como pendiente hasta configurar y probar un servicio compatible.]',
-          metodo: 'ocr-pendiente',
+          contenido: ocrText.substring(0, MAX_DOC_CHARS) || '[No se pudo extraer texto de la imagen.]',
+          metodo: ocrText ? 'directo' : 'ocr-pendiente',
         });
       } else if (['doc', 'docx', 'xls', 'xlsx'].includes(ext)) {
         const text = await extractOfficeText(await response.blob(), ext);

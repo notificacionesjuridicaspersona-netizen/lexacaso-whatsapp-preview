@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { downloadDocument, formatBytes } from '../../lib/helpers';
+import { downloadDocument, deleteDocument, formatBytes } from '../../lib/helpers';
 import type { Documento, Expediente } from '../../types';
 
 export default function DocumentosRecibidos() {
@@ -96,7 +96,18 @@ export default function DocumentosRecibidos() {
                   )}
                 </span>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={() => handleDownload(doc)}>Descargar</button>
+              <div className="doc-actions">
+                <button className="btn btn-secondary btn-sm" onClick={() => handleDownload(doc)}>Descargar</button>
+                <button className="btn-icon btn-danger" title="Eliminar documento" onClick={async () => {
+                  if (!confirm(`¿Eliminar el documento "${doc.nombre}"? Esta acción no se puede deshacer.`)) return;
+                  const result = await deleteDocument(doc);
+                  if (result.success) {
+                    setDocumentos(documentos.filter((d) => d.id !== doc.id));
+                  } else {
+                    setError(result.error || 'Error al eliminar');
+                  }
+                }}>Eliminar</button>
+              </div>
             </div>
           ))}
         </div>

@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { supabase, STORAGE_BUCKET } from '../../lib/supabase';
-import { extraerTextoDeArchivo } from '../../lib/helpers';
+import { extraerTextoDeArchivo, logAuditoria } from '../../lib/helpers';
 import { runAI } from '../../lib/ai';
 
 interface DocumentoLocal {
   id: string;
   nombre: string;
   ruta_storage?: string;
-  contenido_texto?: string;
   tipo_mime?: string;
   file?: File;
 }
@@ -23,20 +22,19 @@ interface AnalisisIAProps {
     observaciones?: string;
   };
   documentos: DocumentoLocal[];
-  onGuardarResultado?: (resultado: string) => void;
+  onAnalisisChanged?: () => void;
 }
 
 export const AnalisisIA: React.FC<AnalisisIAProps> = ({
   expedienteId,
   expedienteDatos,
   documentos,
-  onGuardarResultado,
+  onAnalisisChanged,
 }) => {
   const [cargando, setCargando] = useState(false);
   const [herramientaEnProceso, setHerramientaEnProceso] = useState<string | null>(null);
   const [resultado, setResultado] = useState<string>('');
 
-  // Modal Manual
   const [modalManualOpen, setModalManualOpen] = useState(false);
   const [tipoManual, setTipoManual] = useState('');
   const [textoManual, setTextoManual] = useState('');
@@ -49,26 +47,26 @@ export const AnalisisIA: React.FC<AnalisisIAProps> = ({
   };
 
   const guardarAnalisisManual = async () => {
-    if (!textoManual.trim()) return;
+    if (!textoManual.trim() || !expedienteId) return;
     setGuardandoManual(true);
 
     try {
-      if (expedienteId) {
-        await supabase.from('analisis_expediente').insert({
-          expediente_id: expedienteId,
-          tipo: tipoManual,
-          titulo: tipoManual,
-          contenido: textoManual,
-          es_manual: true,
-        });
-      }
+      const { error } = await supabase.from('analisis_juridicos').insert({
+        expediente_id: expedienteId,
+        tipo: 'estructurado',
+        titulo: tipoManual,
+        contenido: textoManual,
+      });
+      if (error) throw new Error(error.message);
+
+      await logAuditoria('crear_analisis_manual', `Análisis: ${tipoManual}`, 'analisis', null);
 
       const resTexto = `[ANÁLISIS MANUAL REGISTRADO - ${tipoManual.toUpperCase()}]\n\n${textoManual}`;
       setResultado(resTexto);
-      if (onGuardarResultado) onGuardarResultado(resTexto);
       setModalManualOpen(false);
+      if (onAnalisisChanged) onAnalisisChanged();
     } catch (e) {
-      console.error('Error al guardar análisis manual:', e);
+      setResultado(`Error al guardar análisis manual: ${(e as Error).message}`);
     } finally {
       setGuardandoManual(false);
     }
@@ -83,36 +81,23 @@ export const AnalisisIA: React.FC<AnalisisIAProps> = ({
       let textoDocumentos = '';
 
       for (const doc of documentos) {
-        let textoDoc = doc.contenido_texto || '';
+        let textoDoc = '';
 
-        // Si el texto está vacío o contiene la plantilla antigua de aviso, forzar la re-extracción OCR
-        if (
-          !textoDoc ||
-          textoDoc.includes('Pendiente de configurar') ||
-          textoDoc.includes('PDF escaneado')
-        ) {
-          if (doc.file) {
-            textoDoc = await extraerTextoDeArchivo(doc.file);
-          } else if (doc.ruta_storage) {
-            const { data } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(doc.ruta_storage, 60);
-            if (data?.signedUrl) {
-              const resp = await fetch(data.signedUrl);
-              const blob = await resp.blob();
-              const file = new File([blob], doc.nombre, { type: doc.tipo_mime || 'application/pdf' });
-              textoDoc = await extraerTextoDeArchivo(file);
-
-              // Actualizar en Supabase para no repetir OCR
-              if (textoDoc.trim()) {
-                await supabase.from('documentos').update({ contenido_texto: textoDoc }).eq('id', doc.id);
-              }
-            }
+        if (doc.file) {
+          textoDoc = await extraerTextoDeArchivo(doc.file);
+        } else if (doc.ruta_storage) {
+          const { data } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(doc.ruta_storage, 60);
+          if (data?.signedUrl) {
+            const resp = await fetch(data.signedUrl);
+            const blob = await resp.blob();
+            const file = new File([blob], doc.nombre, { type: doc.tipo_mime || 'application/pdf' });
+            textoDoc = await extraerTextoDeArchivo(file);
           }
         }
 
         textoDocumentos += `\n--- DOCUMENTO: ${doc.nombre} ---\n${textoDoc.trim() || '(No se pudo extraer texto legible del documento)'}\n`;
       }
 
-      // Preparar contexto completo
       const contexto = `
 INFORMACIÓN DEL EXPEDIENTE:
 Título: ${expedienteDatos?.titulo || 'N/A'}
@@ -133,19 +118,19 @@ ${textoDocumentos}
         setResultado(aiResponse.content);
 
         if (expedienteId) {
-          await supabase.from('analisis_expediente').insert({
+          const { error } = await supabase.from('analisis_juridicos').insert({
             expediente_id: expedienteId,
-            tipo: tipoAnalisis,
+            tipo: 'ia',
             titulo: tipoAnalisis,
             contenido: aiResponse.content,
-            es_manual: false,
           });
+          if (error) throw new Error(error.message);
+          await logAuditoria('ejecutar_herramienta_ia', `Herramienta: ${tipoAnalisis}`, 'analisis', null);
         }
 
-        if (onGuardarResultado) onGuardarResultado(aiResponse.content);
+        if (onAnalisisChanged) onAnalisisChanged();
       }
     } catch (e) {
-      console.error(e);
       setResultado(`Error durante la ejecución del análisis: ${(e as Error).message}`);
     } finally {
       setCargando(false);
@@ -196,7 +181,6 @@ ${textoDocumentos}
         ))}
       </div>
 
-      {/* MODAL MANUAL */}
       {modalManualOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 max-w-lg w-full shadow-xl">
@@ -232,7 +216,6 @@ ${textoDocumentos}
         </div>
       )}
 
-      {/* RESULTADO */}
       {resultado && (
         <div className="mt-4 p-4 bg-slate-50 rounded border text-sm whitespace-pre-wrap leading-relaxed text-slate-800 font-sans">
           {resultado}

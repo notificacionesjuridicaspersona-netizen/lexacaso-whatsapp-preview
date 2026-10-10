@@ -1,12 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AuthPage from '../auth/AuthPage';
+import { getAppSettings } from '../../lib/helpers';
 
 interface LandingPageProps {
   onIngresar: () => void;
 }
 
-export default function LandingPage({ onIngresar }: LandingPageProps) {
+export default function LandingPage(_props: LandingPageProps) {
   const [showAuth, setShowAuth] = useState(false);
+  const [settings, setSettings] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    (async () => {
+      const s = await getAppSettings();
+      setSettings(s);
+    })();
+  }, []);
+
+  const whatsappEnabled = settings.whatsapp_enabled !== 'false';
+  const whatsappNumber = settings.whatsapp_number || '573105603386';
 
   if (showAuth) {
     return <AuthPage />;
@@ -22,7 +34,20 @@ export default function LandingPage({ onIngresar }: LandingPageProps) {
             <span>Tu caso, en buenas manos.</span>
           </div>
         </div>
-        <button className="btn btn-secondary" onClick={() => setShowAuth(true)}>Ingresar</button>
+        <div className="header-user">
+          {whatsappEnabled && (
+            <a
+              href={`https://wa.me/${whatsappNumber}?text=Hola%2C%20me%20gustar%C3%ADa%20contactar%20con%20LexaCaso`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="whatsapp-btn"
+              title="Contactar por WhatsApp"
+            >
+              WhatsApp
+            </a>
+          )}
+          <button className="btn btn-secondary" onClick={() => setShowAuth(true)}>Ingresar</button>
+        </div>
       </header>
 
       <section className="landing-hero">

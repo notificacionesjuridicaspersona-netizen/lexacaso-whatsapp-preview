@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { getAppSettings } from '../../lib/helpers';
 
 type Mode = 'login' | 'register' | 'recover';
 
@@ -9,6 +10,7 @@ export default function AuthPage() {
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [nombreCompleto, setNombreCompleto] = useState('');
   const [cedula, setCedula] = useState('');
   const [celular, setCelular] = useState('');
@@ -17,6 +19,17 @@ export default function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [settings, setSettings] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    (async () => {
+      const s = await getAppSettings();
+      setSettings(s);
+    })();
+  }, []);
+
+  const whatsappEnabled = settings.whatsapp_enabled !== 'false';
+  const whatsappNumber = settings.whatsapp_number || '573105603386';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,6 +85,17 @@ export default function AuthPage() {
           <img src="/lexacaso.jpeg" alt="LEXACASO" className="auth-logo" />
           <h1>LEXACASO</h1>
           <p>Gestión Jurídica Integral</p>
+          {whatsappEnabled && (
+            <a
+              href={`https://wa.me/${whatsappNumber}?text=Hola%2C%20me%20gustar%C3%ADa%20contactar%20con%20LexaCaso`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="whatsapp-btn"
+              title="Contactar por WhatsApp"
+            >
+              WhatsApp
+            </a>
+          )}
         </div>
 
         <div className="auth-card">
@@ -155,15 +179,25 @@ export default function AuthPage() {
             {mode !== 'recover' && (
               <div className="form-group">
                 <label htmlFor="password">Contraseña</label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  placeholder="Mínimo 6 caracteres"
-                />
+                <div className="password-input-wrapper">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    placeholder="Mínimo 6 caracteres"
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowPassword(!showPassword)}
+                    title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {showPassword ? '◉' : '◌'}
+                  </button>
+                </div>
               </div>
             )}
 

@@ -7,6 +7,7 @@ import {
   searchExpedientes,
   uploadDocument,
   downloadDocument,
+  deleteDocument,
   exportExpedienteToDocx,
   exportExpedientesToXlsx,
   exportExpedientesToCsv,
@@ -693,7 +694,7 @@ export default function AdminExpedientes() {
                           <div className="form-group">
                             <label>Prioridad</label>
                             <select value={editForm.prioridad || ''} onChange={(e) => setEditForm({ ...editForm, prioridad: e.target.value })}>
-                              {PRIORIDADES.map((p) => <option key={p} value={p}>{p}</option>)}
+                              {PRIORIDADES.map((p) => <option key={p.id} value={p.label}>{p.label}</option>)}
                             </select>
                           </div>
                         </div>
@@ -888,7 +889,19 @@ export default function AdminExpedientes() {
                                 )}
                               </span>
                             </div>
-                            <button className="btn btn-secondary btn-sm" onClick={() => handleDownloadDoc(doc)}>Descargar</button>
+                            <div className="doc-actions">
+                              <button className="btn btn-secondary btn-sm" onClick={() => handleDownloadDoc(doc)}>Descargar</button>
+                              <button className="btn-icon btn-danger" title="Eliminar documento" onClick={async () => {
+                                if (!confirm(`¿Eliminar el documento "${doc.nombre}"? Esta acción no se puede deshacer.`)) return;
+                                const result = await deleteDocument(doc);
+                                if (!result.success) {
+                                  setError(result.error || 'Error al eliminar');
+                                } else {
+                                  await logAuditoria('eliminar_documento', `Documento: ${doc.nombre}`, 'documento', doc.id);
+                                  setExpDocumentos(expDocumentos.filter((d) => d.id !== doc.id));
+                                }
+                              }}>Eliminar</button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1126,7 +1139,7 @@ export default function AdminExpedientes() {
           <div className="form-group">
             <label>Prioridad</label>
             <select value={newExp.prioridad} onChange={(e) => setNewExp({ ...newExp, prioridad: e.target.value })}>
-              {PRIORIDADES.map((p) => <option key={p} value={p}>{p}</option>)}
+              {PRIORIDADES.map((p) => <option key={p.id} value={p.label}>{p.label}</option>)}
             </select>
           </div>
         </div>

@@ -174,6 +174,35 @@ export async function downloadDocument(doc: Documento): Promise<{ success: boole
   }
 }
 
+// ============================================
+// FILE DELETE (Borrado seguro: Storage + DB)
+// ============================================
+
+export async function deleteDocument(doc: Documento): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error: storageError } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .remove([doc.ruta_storage]);
+
+    if (storageError) {
+      return { success: false, error: `Error al eliminar archivo: ${storageError.message}` };
+    }
+
+    const { error: dbError } = await supabase
+      .from('documentos')
+      .delete()
+      .eq('id', doc.id);
+
+    if (dbError) {
+      return { success: false, error: `Error al eliminar registro: ${dbError.message}` };
+    }
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: `Error: ${(e as Error).message}` };
+  }
+}
+
 function triggerBlobDownload(blob: Blob, filename: string): void {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');

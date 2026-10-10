@@ -1143,6 +1143,50 @@ body {
 }
 .alert-close:hover { opacity: 1; }
 
+/* ============================================
+   PASSWORD TOGGLE
+   ============================================ */
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.password-input-wrapper input {
+  width: 100%;
+  padding-right: 40px;
+}
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  color: var(--color-text-muted);
+  padding: 4px;
+  line-height: 1;
+}
+.password-toggle:hover {
+  color: var(--color-primary);
+}
+
+/* ============================================
+   DOC ACTIONS (Download + Delete)
+   ============================================ */
+.doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ============================================
+   AUTH PAGE - header buttons
+   ============================================ */
+.auth-brand .whatsapp-btn {
+  margin-top: 8px;
+}
+
 /* Responsive for new components */
 @media (max-width: 768px) {
   .tools-grid { grid-template-columns: 1fr; }
@@ -1150,6 +1194,7 @@ body {
   .tool-actions { width: 100%; }
   .comentarios-options { flex-direction: column; gap: 8px; }
   .whatsapp-btn { padding: 4px 10px; font-size: 0.75rem; }
+  .doc-actions { flex-direction: column; gap: 4px; }
 }
 
 /* ============================================
