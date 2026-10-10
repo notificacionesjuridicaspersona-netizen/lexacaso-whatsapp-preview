@@ -1187,6 +1187,25 @@ body {
   margin-top: 8px;
 }
 
+/* ============================================
+   ADMIN USER ACTIONS
+   ============================================ */
+.row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.password-display {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-left: 4px;
+}
+.form-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
+}
+
 /* Responsive for new components */
 @media (max-width: 768px) {
   .tools-grid { grid-template-columns: 1fr; }

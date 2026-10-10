@@ -1,2 +1,5 @@
 [functions.send-notification]
 verify_jwt = true
+
+[functions.delete-user]
+verify_jwt = true

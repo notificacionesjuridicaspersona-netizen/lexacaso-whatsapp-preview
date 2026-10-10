@@ -15,7 +15,8 @@ export default function AuthPage() {
   const [cedula, setCedula] = useState('');
   const [celular, setCelular] = useState('');
   const [direccion, setDireccion] = useState('');
-  const [autorizacion, setAutorizacion] = useState(false);
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [aceptaHabeasData, setAceptaHabeasData] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,8 +43,13 @@ export default function AuthPage() {
         const { error } = await signIn(email, password);
         if (error) setError(error);
       } else if (mode === 'register') {
-        if (!autorizacion) {
-          setError('Debe autorizar el tratamiento de sus datos personales para continuar.');
+        if (!aceptaTerminos) {
+          setError('Debe aceptar los Términos y Condiciones para continuar.');
+          setLoading(false);
+          return;
+        }
+        if (!aceptaHabeasData) {
+          setError('Debe autorizar el tratamiento de sus datos personales (Ley 1581 de 2012) para continuar.');
           setLoading(false);
           return;
         }
@@ -168,10 +174,18 @@ export default function AuthPage() {
                 <label className="checkbox-label">
                   <input
                     type="checkbox"
-                    checked={autorizacion}
-                    onChange={(e) => setAutorizacion(e.target.checked)}
+                    checked={aceptaTerminos}
+                    onChange={(e) => setAceptaTerminos(e.target.checked)}
                   />
-                  <span>Autorizo el tratamiento de mis datos personales conforme a la Ley 1581 de 2012.</span>
+                  <span>Acepto los <a href="https://notificacionesjuridi-dejn.bolt.host" target="_blank" rel="noopener noreferrer">Términos y Condiciones</a> del servicio.</span>
+                </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={aceptaHabeasData}
+                    onChange={(e) => setAceptaHabeasData(e.target.checked)}
+                  />
+                  <span>Autorizo el tratamiento de mis datos personales conforme a la <strong>Política de Tratamiento de Datos Personales</strong> (Ley 1581 de 2012 - Habeas Data).</span>
                 </label>
               </>
             )}

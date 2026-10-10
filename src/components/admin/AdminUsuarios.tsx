@@ -11,6 +11,8 @@ export default function AdminUsuarios() {
   const [search, setSearch] = useState('');
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [editForm, setEditForm] = useState<Partial<Profile>>({});
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, string | null>>({});
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   const loadUsuarios = useCallback(async () => {
     setLoading(true);
@@ -47,7 +49,6 @@ export default function AdminUsuarios() {
       }
     }
 
-    // Role change via RPC
     if (editForm.rol && editForm.rol !== editingUser.rol) {
       const { error: roleError } = await supabase.rpc('set_user_role', {
         target_user_id: editingUser.id,
@@ -63,6 +64,43 @@ export default function AdminUsuarios() {
     await logAuditoria('editar_usuario', `Usuario: ${editingUser.email}`, 'perfil', editingUser.id);
     setEditingUser(null);
     loadUsuarios();
+  };
+
+  const handleRevealPassword = async (userId: string) => {
+    if (revealedPasswords[userId] !== undefined) {
+      setRevealedPasswords({ ...revealedPasswords, [userId]: null });
+      return;
+    }
+    setRevealedPasswords({ ...revealedPasswords, [userId]: '••••••' });
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    setDeletingUserId(userId);
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'Error al eliminar usuario');
+        return;
+      }
+
+      await logAuditoria('eliminar_usuario', `Usuario eliminado: ${userId}`, 'perfil', userId);
+      loadUsuarios();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDeletingUserId(null);
+    }
   };
 
   const filtered = usuarios.filter((u) => {
@@ -106,6 +144,7 @@ export default function AdminUsuarios() {
                 <th>Celular</th>
                 <th>Rol</th>
                 <th>Registro</th>
+                <th>Contraseña</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -121,7 +160,35 @@ export default function AdminUsuarios() {
                   </td>
                   <td>{new Date(u.created_at).toLocaleDateString('es-CO')}</td>
                   <td>
-                    <button className="btn-icon" onClick={() => { setEditingUser(u); setEditForm(u); }}>Editar</button>
+                    <button
+                      className="btn-icon"
+                      title={revealedPasswords[u.id] !== null && revealedPasswords[u.id] !== undefined ? 'Ocultar' : 'Mostrar contraseña'}
+                      onClick={() => handleRevealPassword(u.id)}
+                    >
+                      {revealedPasswords[u.id] !== null && revealedPasswords[u.id] !== undefined ? '◉' : '◌'}
+                    </button>
+                    {revealedPasswords[u.id] !== null && revealedPasswords[u.id] !== undefined && (
+                      <span className="password-display">N/A</span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="row-actions">
+                      <button className="btn-icon" onClick={() => { setEditingUser(u); setEditForm(u); }}>Editar</button>
+                      {u.rol !== 'admin' && (
+                        <button
+                          className="btn-icon btn-danger"
+                          title="Eliminar usuario"
+                          disabled={deletingUserId === u.id}
+                          onClick={() => {
+                            if (confirm(`¿Eliminar el usuario "${u.nombre_completo}" (${u.email})?\n\nEsta acción eliminará la cuenta y todos sus datos asociados. Los expedientes históricos vinculados también serán eliminados por las relaciones de integridad referencial.\n\nEsta acción no se puede deshacer.`)) {
+                              handleDeleteUser(u.id);
+                            }
+                          }}
+                        >
+                          {deletingUserId === u.id ? '…' : 'Eliminar'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -157,6 +224,27 @@ export default function AdminUsuarios() {
                 <option value="cliente">Cliente</option>
                 <option value="admin">Administrador</option>
               </select>
+            </div>
+            <div className="form-group">
+              <label>Restablecer contraseña</label>
+              <p className="form-hint">El usuario puede restablecer su contraseña desde la pantalla de inicio de sesión ("¿Olvidó su contraseña?").</p>
+              <button
+                className="btn btn-secondary btn-sm"
+                type="button"
+                onClick={async () => {
+                  const { error: resetError } = await supabase.auth.resetPasswordForEmail(editingUser.email, {
+                    redirectTo: window.location.origin,
+                  });
+                  if (resetError) {
+                    setError(resetError.message);
+                  } else {
+                    setError(null);
+                    alert(`Se ha enviado un enlace de restablecimiento a ${editingUser.email}`);
+                  }
+                }}
+              >
+                Enviar enlace de restablecimiento
+              </button>
             </div>
             <div className="form-actions">
               <button className="btn btn-primary" onClick={handleSaveUser}>Guardar</button>
