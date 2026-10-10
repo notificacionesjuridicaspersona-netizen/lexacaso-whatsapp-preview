@@ -1,3 +1,4 @@
+
 export type AIProvider = 'openai' | 'gemini' | 'local';
 
 export function getAIProvider(): AIProvider {
