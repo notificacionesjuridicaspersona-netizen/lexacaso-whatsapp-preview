@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { supabase } from '../../lib/supabase';
 import { extraerTextoDeArchivo } from '../../lib/helpers';
 
 interface DocumentoLocal {
@@ -8,99 +9,130 @@ interface DocumentoLocal {
 }
 
 interface AnalisisIAProps {
+  expedienteId?: string;
   documentos: DocumentoLocal[];
   onGuardarResultado?: (resultado: string) => void;
 }
 
-export const AnalisisIA: React.FC<AnalisisIAProps> = ({ documentos, onGuardarResultado }) => {
+export const AnalisisIA: React.FC<AnalisisIAProps> = ({ expedienteId, documentos, onGuardarResultado }) => {
   const [cargando, setCargando] = useState(false);
   const [resultado, setResultado] = useState<string>('');
+  
+  // Estado para el Modal Manual
+  const [modalManualOpen, setModalManualOpen] = useState(false);
+  const [tipoManual, setTipoManual] = useState('');
+  const [textoManual, setTextoManual] = useState('');
+  const [guardandoManual, setGuardandoManual] = useState(false);
 
-  const ejecutarAnalisis = async (tipoAnalisis: string) => {
-    setCargando(true);
-    setResultado('Procesando documentos con OCR y analizando con Gemini...');
+  // Abrir Modal Manual
+  const abrirModalManual = (tipo: string) => {
+    setTipoManual(tipo);
+    setTextoManual('');
+    setModalManualOpen(true);
+  };
+
+  // Guardar Análisis Manual en Supabase
+  const guardarAnalisisManual = async () => {
+    if (!textoManual.trim()) return;
+    setGuardandoManual(true);
 
     try {
-      let textoConsolidado = '';
-
-      for (const doc of documentos) {
-        if (doc.file) {
-          const textoExtraido = await extraerTextoDeArchivo(doc.file);
-          textoConsolidado += `\n--- DOCUMENTO: ${doc.nombre} ---\n${textoExtraido}\n`;
-        }
+      if (expedienteId) {
+        await supabase.from('analisis_expediente').insert({
+          expediente_id: expedienteId,
+          tipo: tipoManual,
+          titulo: tipoManual,
+          contenido: textoManual,
+          es_manual: true
+        });
       }
 
-      if (!textoConsolidado.trim()) {
-        setResultado('No se pudo extraer texto de los documentos adjuntos.');
-        setCargando(false);
-        return;
-      }
-
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        setResultado('Error: No se ha configurado VITE_GEMINI_API_KEY en las variables de entorno.');
-        setCargando(false);
-        return;
-      }
-
-      const prompt = `Actúa como un asistente jurídico experto. Realiza un análisis de tipo "${tipoAnalisis}" basándote en el siguiente contenido extraído de los documentos:\n\n${textoConsolidado}`;
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
-          })
-        }
-      );
-
-      const data = await response.json();
-      const respuestaTexto =
-        data.candidates?.[0]?.content?.parts?.[0]?.text || 'No se obtuvo respuesta de Gemini.';
-
-      setResultado(respuestaTexto);
-      if (onGuardarResultado) {
-        onGuardarResultado(respuestaTexto);
-      }
-    } catch (error) {
-      console.error(error);
-      setResultado('Error al procesar el análisis con IA.');
+      setResultado(`[ANÁLISIS MANUAL GUARDADO - ${tipoManual.toUpperCase()}]\n\n${textoManual}`);
+      if (onGuardarResultado) onGuardarResultado(textoManual);
+      setModalManualOpen(false);
+    } catch (e) {
+      console.error('Error al guardar análisis manual:', e);
     } finally {
-      setCargando(false);
+      setGuardandoManual(false);
     }
   };
 
+  const HERRAMIENTAS = [
+    { key: 'tool_analizar_documentos', label: 'Analizar documentos jurídicos' },
+    { key: 'tool_resumir_hechos', label: 'Resumir hechos cronológicamente' },
+    { key: 'tool_identificar_problemas', label: 'Identificar problemas jurídicos' },
+    { key: 'tool_jurisprudencia', label: 'Investigar jurisprudencia' },
+    { key: 'tool_normatividad', label: 'Identificar normatividad aplicable' },
+    { key: 'tool_alternativas', label: 'Evaluar alternativas de solución' },
+    { key: 'tool_terminos_plazos', label: 'Identificar términos y plazos' },
+    { key: 'tool_pruebas_faltantes', label: 'Detectar pruebas faltantes' },
+    { key: 'tool_estrategias', label: 'Proponer estrategias jurídicas' }
+  ];
+
   return (
     <div className="p-4 bg-white rounded-lg shadow border border-gray-200">
-      <h3 className="text-lg font-bold mb-3 text-slate-800">Herramientas de IA</h3>
-      <div className="flex flex-wrap gap-2 mb-4">
-        <button
-          onClick={() => ejecutarAnalisis('Resumir hechos cronológicamente')}
-          disabled={cargando}
-          className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-        >
-          Resumir hechos cronológicamente
-        </button>
-        <button
-          onClick={() => ejecutarAnalisis('Informe jurídico integral')}
-          disabled={cargando}
-          className="px-3 py-2 bg-emerald-600 text-white text-sm rounded hover:bg-emerald-700 disabled:opacity-50"
-        >
-          Informe jurídico integral
-        </button>
+      <h3 className="text-lg font-bold mb-4 text-slate-800">Herramientas de Análisis</h3>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {HERRAMIENTAS.map((h) => (
+          <div key={h.key} className="p-3 border rounded-lg bg-slate-50 flex flex-col justify-between">
+            <span className="font-semibold text-slate-700 text-sm mb-3">{h.label}</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => abrirModalManual(h.label)}
+                className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs rounded hover:bg-slate-100 font-medium"
+              >
+                Manual
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {cargando && <p className="text-sm text-blue-600 font-medium">Procesando OCR e IA...</p>}
+      {/* MODAL MANUAL */}
+      {modalManualOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full shadow-xl">
+            <h4 className="text-md font-bold mb-2 text-slate-800">Análisis Manual: {tipoManual}</h4>
+            <p className="text-xs text-slate-500 mb-4">Escriba o pegue el análisis para registrarlo manualmente en el expediente.</p>
+            
+            <textarea
+              value={textoManual}
+              onChange={(e) => setTextoManual(e.target.value)}
+              rows={6}
+              className="w-full p-2 border rounded text-sm mb-4 focus:ring-2 focus:ring-blue-500"
+              placeholder="Ingrese las observaciones, resumen o hallazgos..."
+            />
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setModalManualOpen(false)}
+                className="px-4 py-2 border text-slate-600 rounded text-sm hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={guardarAnalisisManual}
+                disabled={guardandoManual || !textoManual.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                {guardandoManual ? 'Guardando...' : 'Guardar Análisis'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {resultado && (
-        <div className="mt-4 p-3 bg-gray-50 rounded border text-sm whitespace-pre-wrap font-mono">
+        <div className="mt-4 p-4 bg-slate-50 rounded border text-sm whitespace-pre-wrap leading-relaxed text-slate-800 font-sans">
           {resultado}
         </div>
       )}
     </div>
   );
+};
+
+export default AnalisisIA;
 };
 
 export default AnalisisIA;
