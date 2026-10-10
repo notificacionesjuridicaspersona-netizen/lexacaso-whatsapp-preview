@@ -28,17 +28,12 @@ export async function runAI(prompt: string, context: string): Promise<AIResult> 
     : prompt;
 
   try {
-    if (provider === 'gemini') {
+    if (provider === 'gemini' || import.meta.env.VITE_GEMINI_API_KEY) {
       return await callGemini(fullPrompt);
     } else if (provider === 'openai') {
       return await callOpenAI(fullPrompt);
     } else {
-      // Intento forzado a Gemini si la variable VITE_GEMINI_API_KEY existe en runtime
-      const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (geminiKey && geminiKey.trim() !== '') {
-        return await callGemini(fullPrompt);
-      }
-      return generateLocalAnalysis(prompt, context);
+      return { content: 'No se configuró una API Key válida para Gemini u OpenAI.', provider: 'local' };
     }
   } catch (e) {
     return { content: '', provider: 'local', error: (e as Error).message };
@@ -49,7 +44,7 @@ async function callGemini(prompt: string): Promise<AIResult> {
   const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
   if (!geminiKey) {
-    throw new Error('VITE_GEMINI_API_KEY no está disponible en las variables de entorno.');
+    throw new Error('VITE_GEMINI_API_KEY no configurada.');
   }
 
   const res = await fetch(
@@ -61,7 +56,7 @@ async function callGemini(prompt: string): Promise<AIResult> {
         systemInstruction: {
           parts: [
             {
-              text: 'Eres un asistente jurídico colombiano. Proporciona análisis claros, estructurados y basados en el derecho colombiano. Ofrece resúmenes detallados de los documentos e indica las pretensiones y estrategias correspondientes. No inventes sentencias ni artículos.',
+              text: 'Eres un abogado consultor y analista jurídico experto en derecho colombiano. Realiza análisis profundos sobre los documentos e información del expediente proporcionado. Ofrece resúmenes cronológicos, alternativas procesales y recomendaciones claras sin inventar citas ni normas.',
             },
           ],
         },
@@ -73,11 +68,11 @@ async function callGemini(prompt: string): Promise<AIResult> {
 
   if (!res.ok) {
     const errBody = await res.text();
-    return { content: '', provider: 'gemini', error: `Error en API Gemini (${res.status}): ${errBody}` };
+    return { content: '', provider: 'gemini', error: `Gemini API Error (${res.status}): ${errBody}` };
   }
 
   const data = await res.json();
-  const content = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No se obtuvo respuesta de Gemini.';
+  const content = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta de Gemini.';
   return { content, provider: 'gemini' };
 }
 
@@ -93,10 +88,7 @@ async function callOpenAI(prompt: string): Promise<AIResult> {
     body: JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [
-        {
-          role: 'system',
-          content: 'Eres un asistente jurídico colombiano. Proporciona análisis claros, estructurados y basados en el derecho colombiano.',
-        },
+        { role: 'system', content: 'Eres un asistente jurídico colombiano.' },
         { role: 'user', content: prompt },
       ],
       temperature: 0.3,
@@ -104,29 +96,10 @@ async function callOpenAI(prompt: string): Promise<AIResult> {
     }),
   });
 
-  if (!res.ok) {
-    const errBody = await res.text();
-    return { content: '', provider: 'openai', error: `OpenAI error (${res.status}): ${errBody}` };
-  }
-
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content || '';
   return { content, provider: 'openai' };
 }
-
-function generateLocalAnalysis(prompt: string, context: string): AIResult {
-  const lines: string[] = [];
-
-  lines.push('ANÁLISIS JURÍDICO REGISTRADO');
-  lines.push('='.repeat(50));
-  lines.push('');
-  lines.push(`Fecha de registro: ${new Date().toLocaleString('es-CO')}`);
-  lines.push('');
-
-  if (context) {
-    lines.push('INFORMACIÓN DEL EXPEDIENTE:');
-    lines.push(context);
-  }
 
   return { content: lines.join('\n'), provider: 'local' };
 }
