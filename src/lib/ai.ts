@@ -48,20 +48,22 @@ async function callGemini(prompt: string): Promise<AIResult> {
     throw new Error('VITE_GEMINI_API_KEY no configurada.');
   }
 
+  // Se utiliza la versión estable v1 y el modelo alias oficial gemini-1.5-flash
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+    `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        systemInstruction: {
-          parts: [
-            {
-              text: 'Eres un abogado consultor y analista jurídico experto en derecho colombiano. Proporciona resúmenes claros, estructurados y detallados de los documentos y del expediente sin inventar leyes ni sentencias.',
-            },
-          ],
-        },
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [
+          {
+            parts: [
+              {
+                text: `Eres un abogado consultor y analista jurídico experto en derecho colombiano. Proporciona resúmenes claros, estructurados y detallados sin inventar leyes ni sentencias.\n\n${prompt}`,
+              },
+            ],
+          },
+        ],
         generationConfig: { temperature: 0.3, maxOutputTokens: 2500 },
       }),
     }
