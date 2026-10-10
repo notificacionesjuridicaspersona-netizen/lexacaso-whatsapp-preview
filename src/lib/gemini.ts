@@ -1,5 +1,4 @@
-// Módulo de instrucciones jurídicas especializado en Derecho Colombiano
-export const LEGAL_SYSTEM_PROMPT = `
+const LEGAL_SYSTEM_PROMPT = `
 Eres un asistente de análisis jurídico y administrativo especializado en el ordenamiento jurídico colombiano.
 
 ÁREAS DE ANÁLISIS JURÍDICO:
@@ -31,7 +30,6 @@ export async function generarRespuestaGemini(prompt: string): Promise<string> {
     throw new Error('La variable VITE_GEMINI_API_KEY no está configurada.');
   }
 
-  // Endpoint oficial v1 con el modelo vigente gemini-2.5-flash
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
@@ -52,14 +50,9 @@ export async function generarRespuestaGemini(prompt: string): Promise<string> {
 
   if (!response.ok) {
     const errorText = await response.text();
-    // Sanitización para evitar exponer la API Key en los logs
     const safeError = errorText.replace(apiKey, '***');
     throw new Error(`Error ${response.status} en la API de Gemini: ${safeError}`);
   }
-
-  const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta de Gemini.';
-}
 
   const data = await response.json();
   return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta de Gemini.';
