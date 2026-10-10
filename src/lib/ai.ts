@@ -28,7 +28,8 @@ export async function runAI(prompt: string, context: string): Promise<AIResult> 
     : prompt;
 
   try {
-    if (provider === 'gemini' || import.meta.env.VITE_GEMINI_API_KEY) {
+    const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (provider === 'gemini' || (geminiKey && geminiKey.trim() !== '')) {
       return await callGemini(fullPrompt);
     } else if (provider === 'openai') {
       return await callOpenAI(fullPrompt);
@@ -96,10 +97,12 @@ async function callOpenAI(prompt: string): Promise<AIResult> {
     }),
   });
 
+  if (!res.ok) {
+    const errBody = await res.text();
+    return { content: '', provider: 'openai', error: `OpenAI Error (${res.status}): ${errBody}` };
+  }
+
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content || '';
   return { content, provider: 'openai' };
-}
-
-  return { content: lines.join('\n'), provider: 'local' };
 }
