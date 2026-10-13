@@ -472,4 +472,190 @@ export async function exportExpedienteToDocx(
   sections.push(makeParagraph('Prioridad: ' + expediente.prioridad));
   if (expediente.area_juridica) sections.push(makeParagraph('Área jurídica: ' + expediente.area_juridica));
   sections.push(makeParagraph('Fecha de creación: ' + new Date(expediente.created_at).toLocaleDateString('es-CO')));
-  sections.push(
+  sections.push(makeParagraph('Última actualización: ' + new Date(expediente.updated_at).toLocaleDateString('es-CO')));
+  if (expediente.descripcion) {
+    sections.push('<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Descripción</w:t></w:r></w:p>');
+    sections.push(makeParagraph(expediente.descripcion));
+  }
+
+  const documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">\n<w:body>\n' + sections.join('\n') + '\n<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>\n</w:body>\n</w:document>';
+
+  zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default ContentType="application/vnd.openxmlformats-package.relationships+xml" Extension="rels"/><Default ContentType="application/xml" Extension="xml"/><Override ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml" PartName="/word/document.xml"/></Types>');
+
+  zip.folder('_rels')!.file('.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="word/document.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"/></Relationships>');
+
+  zip.folder('word')!.file('document.xml', documentXml);
+
+  const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  triggerBlobDownload(blob, sanitizeFilename('expediente_' + expediente.titulo + '.docx'));
+}
+
+export async function exportExpedientesToXlsx(
+  expedientes: (Expediente & { profiles?: Profile })[]
+): Promise<void> {
+  const zip = new JSZip();
+
+  zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default ContentType="application/vnd.openxmlformats-package.relationships+xml" Extension="rels"/><Default ContentType="application/xml" Extension="xml"/><Override ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml" PartName="/xl/workbook.xml"/><Override ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml" PartName="/xl/worksheets/sheet1.xml"/><Override ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml" PartName="/xl/styles.xml"/></Types>');
+
+  zip.folder('_rels')!.file('.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="xl/workbook.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"/></Relationships>');
+
+  zip.folder('xl')!.file('workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Expedientes" sheetId="1" r:id="rId1"/></sheets></workbook>');
+
+  zip.folder('xl')!.folder('_rels')!.file('workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/><Relationship Id="rId2" Target="styles.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"/></Relationships>');
+
+  const headerCells = ['N° Expediente','N° Radicado','Título','Descripción','Área Jurídica','Estado','Prioridad','Cliente','Cédula','Email','Celular','Fecha Creación','Última Actualización']
+    .map((h) => '<c t="inlineStr"><is><t>' + escapeXml(h) + '</t></is></c>')
+    .join('');
+
+  const dataRows = expedientes.map((e, idx) => {
+    const p = e.profiles;
+    const cells = [
+      e.numero_expediente || '',
+      e.numero_radicado || '',
+      e.titulo,
+      e.descripcion || '',
+      e.area_juridica || '',
+      e.estado,
+      e.prioridad,
+      p?.nombre_completo || '',
+      p?.cedula || '',
+      p?.email || '',
+      p?.celular || '',
+      new Date(e.created_at).toLocaleDateString('es-CO'),
+      new Date(e.updated_at).toLocaleDateString('es-CO'),
+    ];
+    const rowCells = cells.map((c) => '<c t="inlineStr"><is><t>' + escapeXml(c) + '</t></is></c>').join('');
+    return '<row r="' + (idx + 2) + '">' + rowCells + '</row>';
+  }).join('\n');
+
+  zip.folder('xl')!.folder('worksheets')!.file('sheet1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">' + headerCells + '</row>\n' + dataRows + '\n</sheetData></worksheet>');
+
+  zip.folder('xl')!.file('styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/><border/></cellStyleXfs><cellXfs count="1"><xf/></cellXfs></styleSheet>');
+
+  const blob = await zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  triggerBlobDownload(blob, 'expedientes.xlsx');
+}
+
+export function exportExpedientesToCsv(expedientes: (Expediente & { profiles?: Profile })[]): void {
+  const headers = ['N° Expediente', 'N° Radicado', 'Título', 'Estado', 'Prioridad', 'Cliente', 'Cédula', 'Email', 'Fecha Creación'];
+  const rows = expedientes.map((e) => {
+    const p = e.profiles;
+    return [
+      e.numero_expediente || '',
+      e.numero_radicado || '',
+      e.titulo,
+      e.estado,
+      e.prioridad,
+      p?.nombre_completo || '',
+      p?.cedula || '',
+      p?.email || '',
+      new Date(e.created_at).toLocaleDateString('es-CO'),
+    ];
+  });
+
+  const csv = [headers, ...rows]
+    .map((row) => row.map((cell) => '"' + String(cell).replace(/"/g, '""') + '"').join(','))
+    .join('\n');
+
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  triggerBlobDownload(blob, 'expedientes.csv');
+}
+
+// ============================================
+// UTILITIES & NOTIFICATIONS
+// ============================================
+
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+export function sanitizeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_\-.]/g, '_').substring(0, 100);
+}
+
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function makeParagraph(text: string): string {
+  return '<w:p><w:r><w:t xml:space="preserve">' + escapeXml(text) + '</w:t></w:r></w:p>';
+}
+
+export async function sendNotification(
+  to: string,
+  subject: string,
+  message: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      import.meta.env.VITE_SUPABASE_URL + '/functions/v1/send-notification',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ to, subject, message }),
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      await supabase.from('notificaciones').insert({
+        destinatario: to,
+        evento: subject,
+        estado: 'fallida',
+        resultado: data.error || ('Error ' + response.status),
+      });
+      return { success: false, error: data.error || ('Error ' + response.status) };
+    }
+
+    await supabase.from('notificaciones').insert({
+      destinatario: to,
+      evento: subject,
+      estado: 'enviada',
+      resultado: data.id || 'OK',
+    });
+    return { success: true };
+  } catch (e) {
+    await supabase.from('notificaciones').insert({
+      destinatario: to,
+      evento: subject,
+      estado: 'fallida',
+      resultado: (e as Error).message,
+    });
+    return { success: false, error: (e as Error).message };
+  }
+}
+
+export async function getAppSettings(): Promise<Record<string, string>> {
+  const { data } = await supabase.from('app_settings').select('clave, valor');
+  const map: Record<string, string> = {};
+  if (data) {
+    for (const row of data) {
+      map[row.clave] = row.valor || '';
+    }
+  }
+  return map;
+}
+
+export async function updateAppSetting(clave: string, valor: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('app_settings')
+    .update({ valor, updated_at: new Date().toISOString() })
+    .eq('clave', clave);
+  return !error;
+}
