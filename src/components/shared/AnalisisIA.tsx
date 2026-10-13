@@ -34,6 +34,7 @@ export const AnalisisIA: React.FC<AnalisisIAProps> = ({
   const [cargando, setCargando] = useState(false);
   const [herramientaEnProceso, setHerramientaEnProceso] = useState<string | null>(null);
   const [resultado, setResultado] = useState<string>('');
+  const [errorStatus, setErrorStatus] = useState<string | null>(null);
 
   const [modalManualOpen, setModalManualOpen] = useState(false);
   const [tipoManual, setTipoManual] = useState('');
@@ -63,10 +64,11 @@ export const AnalisisIA: React.FC<AnalisisIAProps> = ({
 
       const resTexto = `[ANÁLISIS MANUAL REGISTRADO - ${tipoManual.toUpperCase()}]\n\n${textoManual}`;
       setResultado(resTexto);
+      setErrorStatus(null);
       setModalManualOpen(false);
       if (onAnalisisChanged) onAnalisisChanged();
     } catch (e) {
-      setResultado(`Error al guardar análisis manual: ${(e as Error).message}`);
+      setErrorStatus(`Error al guardar análisis manual: ${(e as Error).message}`);
     } finally {
       setGuardandoManual(false);
     }
@@ -74,8 +76,9 @@ export const AnalisisIA: React.FC<AnalisisIAProps> = ({
 
   const ejecutarAnalisisIA = async (tipoAnalisis: string) => {
     setCargando(true);
+    setErrorStatus(null);
     setHerramientaEnProceso(tipoAnalisis);
-    setResultado('Extrayendo contenido de documentos con OCR y conectando con IA...');
+    setResultado('Procesando expediente y consultando motor de Inteligencia Jurídica...');
 
     try {
       let textoDocumentos = '';
@@ -95,7 +98,7 @@ export const AnalisisIA: React.FC<AnalisisIAProps> = ({
           }
         }
 
-        textoDocumentos += `\n--- DOCUMENTO: ${doc.nombre} ---\n${textoDoc.trim() || '(No se pudo extraer texto legible del documento)'}\n`;
+        textoDocumentos += `\n--- DOCUMENTO: ${doc.nombre} ---\n${textoDoc.trim() || '(No se pudo extraer texto legible)'}\n`;
       }
 
       const contexto = `
@@ -113,9 +116,11 @@ ${textoDocumentos}
       const aiResponse = await runAI(tipoAnalisis, contexto);
 
       if (aiResponse.error) {
-        setResultado(`Error al consultar IA: ${aiResponse.error}`);
+        setErrorStatus(aiResponse.error);
+        setResultado('');
       } else {
         setResultado(aiResponse.content);
+        setErrorStatus(null);
 
         if (expedienteId) {
           const { error } = await supabase.from('analisis_juridicos').insert({
@@ -131,7 +136,8 @@ ${textoDocumentos}
         if (onAnalisisChanged) onAnalisisChanged();
       }
     } catch (e) {
-      setResultado(`Error durante la ejecución del análisis: ${(e as Error).message}`);
+      setErrorStatus(`Error durante la ejecución del análisis: ${(e as Error).message}`);
+      setResultado('');
     } finally {
       setCargando(false);
       setHerramientaEnProceso(null);
@@ -152,7 +158,7 @@ ${textoDocumentos}
 
   return (
     <div className="p-4 bg-white rounded-lg shadow border border-gray-200">
-      <h3 className="text-lg font-bold mb-4 text-slate-800">Herramientas de Análisis</h3>
+      <h3 className="text-lg font-bold mb-4 text-slate-800">Herramientas de Análisis Jurídico</h3>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {HERRAMIENTAS.map((h) => (
@@ -216,8 +222,17 @@ ${textoDocumentos}
         </div>
       )}
 
+      {errorStatus && (
+        <div className="mt-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded text-sm flex justify-between items-center">
+          <span>{errorStatus}</span>
+          <button onClick={() => setErrorStatus(null)} className="text-red-500 hover:text-red-700 text-xs font-bold">
+            ✕
+          </button>
+        </div>
+      )}
+
       {resultado && (
-        <div className="mt-4 p-4 bg-slate-50 rounded border text-sm whitespace-pre-wrap leading-relaxed text-slate-800 font-sans">
+        <div className="mt-4 p-4 bg-slate-50 rounded border border-slate-200 text-sm whitespace-pre-wrap leading-relaxed text-slate-800 font-sans">
           {resultado}
         </div>
       )}
