@@ -91,20 +91,16 @@ export function validateFile(file: File): { valid: boolean; error?: string } {
     return { valid: false, error: 'Archivo no proporcionado' };
   }
 
-  // 1. Validar tamaño
   if (file.size > MAX_FILE_SIZE) {
     return { valid: false, error: 'Archivo demasiado grande. Máximo: 50MB' };
   }
 
-  // 2. Normalizar extensión limpia
   const extClean = getFileExtension(file.name);
   const extWithDot = `.${extClean}`;
 
-  // 3. Normalizar la lista global de extensiones permitidas
   const allowedClean = (ALLOWED_EXTENSIONS || []).map((e) => e.toLowerCase().replace('.', ''));
   const allowedDisplay = allowedClean.map((e) => `.${e}`).join(', ');
 
-  // 4. Comprobación flexible por extensión o por tipo MIME
   const isExtAllowed = allowedClean.includes(extClean);
   const isMimeAllowed =
     file.type === 'application/pdf' ||
@@ -202,7 +198,7 @@ export async function downloadDocument(doc: Documento): Promise<{ success: boole
 }
 
 // ============================================
-// FILE DELETE (Borrado seguro: Storage + DB)
+// FILE DELETE
 // ============================================
 
 export async function deleteDocument(doc: Documento): Promise<{ success: boolean; error?: string }> {
@@ -283,7 +279,7 @@ export async function searchExpedientes(params: SearchParams): Promise<{
   if (query && query.trim()) {
     const q = query.trim();
     dbQuery = dbQuery.or(
-      `titulo.ilike.%${q}%,descripcion.ilike.%${q}%,numero_expediente.ilike.%${q}%,numero_radicado.ilike.%${q}%`
+      `titulo.ilike.%${q}\%,descripcion.ilike.\%${q}%,numero_expediente.ilike.%${q}\%,numero_radicado.ilike.\%${q}%`
     );
   }
 
@@ -301,7 +297,7 @@ export async function searchExpedientes(params: SearchParams): Promise<{
     const { data: matchingProfiles } = await supabase
       .from('profiles')
       .select('id, nombre_completo, cedula, email')
-      .or(`nombre_completo.ilike.%${q}%,cedula.ilike.%${q}%,email.ilike.%${q}%`);
+      .or(`nombre_completo.ilike.%${q}%,cedula.ilike.%${q}\%,email.ilike.\%${q}%`);
 
     if (matchingProfiles && matchingProfiles.length > 0) {
       const matchingIds = matchingProfiles.map((p) => p.id);
@@ -330,4 +326,135 @@ export async function searchExpedientes(params: SearchParams): Promise<{
 // ZIP PREVIEW & EXTRACTION
 // ============================================
 
-export async
+export async function previewZipContents(file: File): Promise<{ entries: { name: string; size: number }[]; error?: string }> {
+  try {
+    const zip = new JSZip();
+    const content = await zip.loadAsync(file);
+    const entries: { name: string; size: number }[] = [];
+    for (const filename in content.files) {
+      const entry = content.files[filename];
+      if (!entry.dir) {
+        const blob = await entry.async('blob');
+        entries.push({ name: filename, size: blob.size });
+      }
+    }
+    return { entries };
+  } catch (e) {
+    return { entries: [], error: `Error al leer ZIP: ${(e as Error).message}` };
+  }
+}
+
+export async function extractAndUploadZipFiles(
+  file: File,
+  expedienteId: string,
+  userId: string,
+  selectedFiles: string[] | null
+): Promise<{ success: number; failed: number; errors: string[] }> {
+  try {
+    const zip = new JSZip();
+    const content = await zip.loadAsync(file);
+    let success = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (const filename in content.files) {
+      const entry = content.files[filename];
+      if (entry.dir) continue;
+      if (selectedFiles && !selectedFiles.includes(filename)) continue;
+
+      const ext = getFileExtension(filename);
+      const allowedClean = (ALLOWED_EXTENSIONS || []).map((e) => e.toLowerCase().replace('.', ''));
+
+      if (!allowedClean.includes(ext)) {
+        errors.push(`${filename}: extensión .${ext} no permitida`);
+        failed++;
+        continue;
+      }
+
+      const safeName = filename.split('/').pop() || filename;
+
+      try {
+        const blob = await entry.async('blob');
+        if (blob.size > MAX_FILE_SIZE) {
+          errors.push(`${safeName}: archivo demasiado grande`);
+          failed++;
+          continue;
+        }
+
+        const extractedFile = new File([blob], safeName, { type: blob.type || 'application/octet-stream' });
+        const result = await uploadDocument(extractedFile, expedienteId, userId);
+        if (result.success) {
+          success++;
+        } else {
+          errors.push(`${safeName}:${result.error}`);
+          failed++;
+        }
+      } catch (e) {
+        errors.push(`${safeName}:${(e as Error).message}`);
+        failed++;
+      }
+    }
+
+    return { success, failed, errors };
+  } catch (e) {
+    return { success: 0, failed: 1, errors: [`Error al procesar ZIP: ${(e as Error).message}`] };
+  }
+}
+
+export async function exportDocumentosToZip(
+  documentos: Documento[],
+  expedienteTitulo: string
+): Promise<{ success: boolean; error?: string }> {
+  const zip = new JSZip();
+  const usedNames = new Set<string>();
+
+  for (const doc of documentos) {
+    try {
+      const { data, error } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .createSignedUrl(doc.ruta_storage, 300);
+
+      if (error || !data) continue;
+
+      const response = await fetch(data.signedUrl);
+      if (!response.ok) continue;
+
+      const blob = await response.blob();
+      let name = doc.nombre;
+      let counter = 1;
+      while (usedNames.has(name)) {
+        const ext = getFileExtension(name);
+        const base = ext ? name.slice(0, -ext.length - 1) : name;
+        name = `${base}_${counter}.${ext}`;
+        counter++;
+      }
+      usedNames.add(name);
+      zip.file(name, blob);
+    } catch (e) {
+      // Skip failed files
+    }
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  triggerBlobDownload(blob, sanitizeFilename(`documentos_${expedienteTitulo}.zip`));
+  return { success: true };
+}
+
+// ============================================
+// EXPORT HELPERS (DOCX, XLSX, CSV)
+// ============================================
+
+export async function exportExpedienteToDocx(
+  expediente: Expediente & { profiles?: Profile },
+  options: {
+    incluirDocumentos: boolean;
+    incluirSeguimientos: boolean;
+    incluirObservaciones: boolean;
+    incluirHistorial: boolean;
+    incluirAnalisis?: boolean;
+  }
+): Promise<void> {
+  const zip = new JSZip();
+  const sections: string[] = [];
+
+  sections.push(`<w:p><w:pPr><w:pStyle w:val="Title
