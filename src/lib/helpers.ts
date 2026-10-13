@@ -78,22 +78,49 @@ export async function logAuditoria(
 }
 
 // ============================================
-// FILE UPLOAD & VALIDATION
+// FILE UPLOAD & VALIDATION (CORREGIDO)
 // ============================================
 
 export function getFileExtension(filename: string): string {
-  const parts = filename.split('.');
+  const parts = filename.trim().split('.');
   return parts.length > 1 ? parts.pop()!.toLowerCase() : '';
 }
 
 export function validateFile(file: File): { valid: boolean; error?: string } {
-  const ext = getFileExtension(file.name);
-  if (!ALLOWED_EXTENSIONS.includes(ext)) {
-    return { valid: false, error: `Extensión .${ext} no permitida. Formatos válidos: ${ALLOWED_EXTENSIONS.join(', ')}` };
+  if (!file) {
+    return { valid: false, error: 'Archivo no proporcionado' };
   }
+
+  // 1. Validar tamaño
   if (file.size > MAX_FILE_SIZE) {
-    return { valid: false, error: `Archivo demasiado grande. Máximo: 50MB` };
+    return { valid: false, error: 'Archivo demasiado grande. Máximo: 50MB' };
   }
+
+  // 2. Normalizar extensión limpia
+  const extClean = getFileExtension(file.name);
+  const extWithDot = `.${extClean}`;
+
+  // 3. Normalizar la lista global de extensiones permitidas
+  const allowedClean = (ALLOWED_EXTENSIONS || []).map((e) => e.toLowerCase().replace('.', ''));
+  const allowedDisplay = allowedClean.map((e) => `.${e}`).join(', ');
+
+  // 4. Comprobación flexible por extensión o por tipo MIME
+  const isExtAllowed = allowedClean.includes(extClean);
+  const isMimeAllowed =
+    file.type === 'application/pdf' ||
+    file.type.startsWith('image/') ||
+    file.type.includes('document') ||
+    file.type.includes('sheet') ||
+    file.type.includes('zip') ||
+    file.type.includes('compressed');
+
+  if (!isExtAllowed && !isMimeAllowed) {
+    return {
+      valid: false,
+      error: `Extensión ${extWithDot || 'desconocida'} no permitida. Formatos válidos: ${allowedDisplay}`,
+    };
+  }
+
   return { valid: true };
 }
 
@@ -303,384 +330,4 @@ export async function searchExpedientes(params: SearchParams): Promise<{
 // ZIP PREVIEW & EXTRACTION
 // ============================================
 
-export async function previewZipContents(file: File): Promise<{ entries: { name: string; size: number }[]; error?: string }> {
-  try {
-    const zip = new JSZip();
-    const content = await zip.loadAsync(file);
-    const entries: { name: string; size: number }[] = [];
-    for (const filename in content.files) {
-      const entry = content.files[filename];
-      if (!entry.dir) {
-        const blob = await entry.async('blob');
-        entries.push({ name: filename, size: blob.size });
-      }
-    }
-    return { entries };
-  } catch (e) {
-    return { entries: [], error: `Error al leer ZIP: ${(e as Error).message}` };
-  }
-}
-
-export async function extractAndUploadZipFiles(
-  file: File,
-  expedienteId: string,
-  userId: string,
-  selectedFiles: string[] | null
-): Promise<{ success: number; failed: number; errors: string[] }> {
-  try {
-    const zip = new JSZip();
-    const content = await zip.loadAsync(file);
-    let success = 0;
-    let failed = 0;
-    const errors: string[] = [];
-
-    for (const filename in content.files) {
-      const entry = content.files[filename];
-      if (entry.dir) continue;
-      if (selectedFiles && !selectedFiles.includes(filename)) continue;
-
-      const ext = getFileExtension(filename);
-      if (!ALLOWED_EXTENSIONS.includes(ext)) {
-        errors.push(`${filename}: extensión .${ext} no permitida`);
-        failed++;
-        continue;
-      }
-
-      const safeName = filename.split('/').pop() || filename;
-
-      try {
-        const blob = await entry.async('blob');
-        if (blob.size > MAX_FILE_SIZE) {
-          errors.push(`${safeName}: archivo demasiado grande`);
-          failed++;
-          continue;
-        }
-
-        const extractedFile = new File([blob], safeName, { type: blob.type || 'application/octet-stream' });
-        const result = await uploadDocument(extractedFile, expedienteId, userId);
-        if (result.success) {
-          success++;
-        } else {
-          errors.push(`${safeName}: ${result.error}`);
-          failed++;
-        }
-      } catch (e) {
-        errors.push(`${safeName}: ${(e as Error).message}`);
-        failed++;
-      }
-    }
-
-    return { success, failed, errors };
-  } catch (e) {
-    return { success: 0, failed: 1, errors: [`Error al procesar ZIP: ${(e as Error).message}`] };
-  }
-}
-
-export async function exportDocumentosToZip(
-  documentos: Documento[],
-  expedienteTitulo: string
-): Promise<{ success: boolean; error?: string }> {
-  const zip = new JSZip();
-  const usedNames = new Set<string>();
-
-  for (const doc of documentos) {
-    try {
-      const { data, error } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .createSignedUrl(doc.ruta_storage, 300);
-
-      if (error || !data) continue;
-
-      const response = await fetch(data.signedUrl);
-      if (!response.ok) continue;
-
-      const blob = await response.blob();
-      let name = doc.nombre;
-      let counter = 1;
-      while (usedNames.has(name)) {
-        const ext = getFileExtension(name);
-        const base = ext ? name.slice(0, -ext.length - 1) : name;
-        name = `${base}_${counter}.${ext}`;
-        counter++;
-      }
-      usedNames.add(name);
-      zip.file(name, blob);
-    } catch (e) {
-      // Skip failed files
-    }
-  }
-
-  const blob = await zip.generateAsync({ type: 'blob' });
-  triggerBlobDownload(blob, sanitizeFilename(`documentos_${expedienteTitulo}.zip`));
-  return { success: true };
-}
-
-// ============================================
-// EXPORT HELPERS (DOCX, XLSX, CSV)
-// ============================================
-
-export async function exportExpedienteToDocx(
-  expediente: Expediente & { profiles?: Profile },
-  options: {
-    incluirDocumentos: boolean;
-    incluirSeguimientos: boolean;
-    incluirObservaciones: boolean;
-    incluirHistorial: boolean;
-    incluirAnalisis?: boolean;
-  }
-): Promise<void> {
-  const zip = new JSZip();
-  const sections: string[] = [];
-
-  sections.push(`<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>EXPEDIENTE: ${escapeXml(expediente.titulo)}</w:t></w:r></w:p>`);
-
-  if (expediente.profiles) {
-    const p = expediente.profiles;
-    sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>DATOS DEL CLIENTE</w:t></w:r></w:p>`);
-    sections.push(makeParagraph(`Nombre: ${p.nombre_completo}`));
-    sections.push(makeParagraph(`Email: ${p.email}`));
-    if (p.cedula) sections.push(makeParagraph(`Cédula: ${p.cedula}`));
-    if (p.celular) sections.push(makeParagraph(`Celular: ${p.celular}`));
-    if (p.direccion) sections.push(makeParagraph(`Dirección: ${p.direccion}`));
-  }
-
-  sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>INFORMACIÓN DEL EXPEDIENTE</w:t></w:r></w:p>`);
-  if (expediente.numero_expediente) sections.push(makeParagraph(`Número de expediente: ${expediente.numero_expediente}`));
-  if (expediente.numero_radicado) sections.push(makeParagraph(`Número de radicado: ${expediente.numero_radicado}`));
-  sections.push(makeParagraph(`Estado: ${expediente.estado}`));
-  sections.push(makeParagraph(`Prioridad: ${expediente.prioridad}`));
-  if (expediente.area_juridica) sections.push(makeParagraph(`Área jurídica: ${expediente.area_juridica}`));
-  sections.push(makeParagraph(`Fecha de creación: ${new Date(expediente.created_at).toLocaleDateString('es-CO')}`));
-  sections.push(makeParagraph(`Última actualización: ${new Date(expediente.updated_at).toLocaleDateString('es-CO')}`));
-  if (expediente.descripcion) {
-    sections.push(`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Descripción</w:t></w:r></w:p>`);
-    sections.push(makeParagraph(expediente.descripcion));
-  }
-
-  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:body>
-${sections.join('\n')}
-<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
-</w:body>
-</w:document>`;
-
-  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
-<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>`);
-
-  zip.folder('_rels')!.file('.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`);
-
-  zip.folder('word')!.file('document.xml', documentXml);
-
-  const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-  triggerBlobDownload(blob, sanitizeFilename(`expediente_${expediente.titulo}.docx`));
-}
-
-export async function exportExpedientesToXlsx(
-  expedientes: (Expediente & { profiles?: Profile })[]
-): Promise<void> {
-  const zip = new JSZip();
-
-  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
-<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
-</Types>`);
-
-  zip.folder('_rels')!.file('.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>`);
-
-  zip.folder('xl')!.file('workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheets>
-<sheet name="Expedientes" sheetId="1" r:id="rId1"/>
-</sheets>
-</workbook>`);
-
-  zip.folder('xl')!.folder('_rels')!.file('workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>`);
-
-  const headerCells = ['N° Expediente','N° Radicado','Título','Descripción','Área Jurídica','Estado','Prioridad','Cliente','Cédula','Email','Celular','Fecha Creación','Última Actualización']
-    .map((h) => `<c t="inlineStr"><is><t>${escapeXml(h)}</t></is></c>`)
-    .join('');
-
-  const dataRows = expedientes.map((e, idx) => {
-    const p = e.profiles;
-    const cells = [
-      e.numero_expediente || '',
-      e.numero_radicado || '',
-      e.titulo,
-      e.descripcion || '',
-      e.area_juridica || '',
-      e.estado,
-      e.prioridad,
-      p?.nombre_completo || '',
-      p?.cedula || '',
-      p?.email || '',
-      p?.celular || '',
-      new Date(e.created_at).toLocaleDateString('es-CO'),
-      new Date(e.updated_at).toLocaleDateString('es-CO'),
-    ];
-    const rowCells = cells.map((c) => `<c t="inlineStr"><is><t>${escapeXml(c)}</t></is></c>`).join('');
-    return `<row r="${idx + 2}">${rowCells}</row>`;
-  }).join('\n');
-
-  zip.folder('xl')!.folder('worksheets')!.file('sheet1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<sheetData>
-<row r="1">${headerCells}</row>
-${dataRows}
-</sheetData>
-</worksheet>`);
-
-  zip.folder('xl')!.file('styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
-<fills count="1"><fill><patternFill patternType="none"/></fill></fills>
-<borders count="1"><border/></borders>
-<cellStyleXfs count="1"><xf/></cellStyleXfs>
-<cellXfs count="1"><xf/></cellXfs>
-</styleSheet>`);
-
-  const blob = await zip.generateAsync({
-    type: 'blob',
-    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
-  triggerBlobDownload(blob, 'expedientes.xlsx');
-}
-
-export function exportExpedientesToCsv(expedientes: (Expediente & { profiles?: Profile })[]): void {
-  const headers = ['N° Expediente', 'N° Radicado', 'Título', 'Estado', 'Prioridad', 'Cliente', 'Cédula', 'Email', 'Fecha Creación'];
-  const rows = expedientes.map((e) => {
-    const p = e.profiles;
-    return [
-      e.numero_expediente || '',
-      e.numero_radicado || '',
-      e.titulo,
-      e.estado,
-      e.prioridad,
-      p?.nombre_completo || '',
-      p?.cedula || '',
-      p?.email || '',
-      new Date(e.created_at).toLocaleDateString('es-CO'),
-    ];
-  });
-
-  const csv = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    .join('\n');
-
-  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-  triggerBlobDownload(blob, 'expedientes.csv');
-}
-
-// ============================================
-// UTILITIES & NOTIFICATIONS
-// ============================================
-
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-export function sanitizeFilename(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_\-.]/g, '_').substring(0, 100);
-}
-
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function makeParagraph(text: string): string {
-  return `<w:p><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
-}
-
-export async function sendNotification(
-  to: string,
-  subject: string,
-  message: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-notification`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ to, subject, message }),
-      }
-    );
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      await supabase.from('notificaciones').insert({
-        destinatario: to,
-        evento: subject,
-        estado: 'fallida',
-        resultado: data.error || `Error ${response.status}`,
-      });
-      return { success: false, error: data.error || `Error ${response.status}` };
-    }
-
-    await supabase.from('notificaciones').insert({
-      destinatario: to,
-      evento: subject,
-      estado: 'enviada',
-      resultado: data.id || 'OK',
-    });
-    return { success: true };
-  } catch (e) {
-    await supabase.from('notificaciones').insert({
-      destinatario: to,
-      evento: subject,
-      estado: 'fallida',
-      resultado: (e as Error).message,
-    });
-    return { success: false, error: (e as Error).message };
-  }
-}
-
-export async function getAppSettings(): Promise<Record<string, string>> {
-  const { data } = await supabase.from('app_settings').select('clave, valor');
-  const map: Record<string, string> = {};
-  if (data) {
-    for (const row of data) {
-      map[row.clave] = row.valor || '';
-    }
-  }
-  return map;
-}
-
-export async function updateAppSetting(clave: string, valor: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('app_settings')
-    .update({ valor, updated_at: new Date().toISOString() })
-    .eq('clave', clave);
-  return !error;
-}
+export async
