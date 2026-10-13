@@ -78,7 +78,7 @@ export async function logAuditoria(
 }
 
 // ============================================
-// FILE UPLOAD & VALIDATION (SOPORTE COMPLETO PDF)
+// FILE UPLOAD & VALIDATION (SOPORTE COMPLETO PDF Y OTROS)
 // ============================================
 
 export function getFileExtension(filename: string): string {
@@ -86,19 +86,27 @@ export function getFileExtension(filename: string): string {
   return parts.length > 1 ? parts.pop()!.toLowerCase() : '';
 }
 
+// Lista por defecto de formatos permitidos
+const DEFAULT_ALLOWED = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'rar', 'jpg', 'jpeg', 'png', 'txt'];
+
 export function validateFile(file: File): { valid: boolean; error?: string } {
   if (!file) {
     return { valid: false, error: 'Archivo no proporcionado' };
   }
 
-  if (file.size > MAX_FILE_SIZE) {
-    return { valid: false, error: 'Archivo demasiado grande. Máximo: 50MB' };
+  const maxSizeBytes = MAX_FILE_SIZE || 50 * 1024 * 1024;
+  if (file.size > maxSizeBytes) {
+    return { valid: false, error: 'El archivo supera el límite de 50MB.' };
   }
 
   const extClean = getFileExtension(file.name);
   const extWithDot = '.' + extClean;
 
-  const allowedClean = (ALLOWED_EXTENSIONS || []).map((e) => e.toLowerCase().replace('.', ''));
+  // Normalizar la lista de extensiones permitidas eliminando puntos y convirtiendo a minúsculas
+  const allowedClean = (ALLOWED_EXTENSIONS && ALLOWED_EXTENSIONS.length > 0)
+    ? ALLOWED_EXTENSIONS.map((e) => e.toLowerCase().replace('.', ''))
+    : DEFAULT_ALLOWED;
+
   const allowedDisplay = allowedClean.map((e) => '.' + e).join(', ');
 
   const isExtAllowed = allowedClean.includes(extClean);
@@ -113,7 +121,7 @@ export function validateFile(file: File): { valid: boolean; error?: string } {
   if (!isExtAllowed && !isMimeAllowed) {
     return {
       valid: false,
-      error: 'Extensión ' + (extWithDot || 'desconocida') + ' no permitida. Formatos válidos: ' + allowedDisplay,
+      error: `Extensión ${extWithDot || 'desconocida'} no permitida. Formatos válidos: ${allowedDisplay}`,
     };
   }
 
@@ -353,13 +361,16 @@ export async function extractAndUploadZipFiles(
     let failed = 0;
     const errors: string[] = [];
 
+    const allowedClean = (ALLOWED_EXTENSIONS && ALLOWED_EXTENSIONS.length > 0)
+      ? ALLOWED_EXTENSIONS.map((e) => e.toLowerCase().replace('.', ''))
+      : DEFAULT_ALLOWED;
+
     for (const filename in content.files) {
       const entry = content.files[filename];
       if (entry.dir) continue;
       if (selectedFiles && !selectedFiles.includes(filename)) continue;
 
       const ext = getFileExtension(filename);
-      const allowedClean = (ALLOWED_EXTENSIONS || []).map((e) => e.toLowerCase().replace('.', ''));
 
       if (!allowedClean.includes(ext)) {
         errors.push(filename + ': extensión .' + ext + ' no permitida');
@@ -371,7 +382,8 @@ export async function extractAndUploadZipFiles(
 
       try {
         const blob = await entry.async('blob');
-        if (blob.size > MAX_FILE_SIZE) {
+        const maxSizeBytes = MAX_FILE_SIZE || 50 * 1024 * 1024;
+        if (blob.size > maxSizeBytes) {
           errors.push(safeName + ': archivo demasiado grande');
           failed++;
           continue;
