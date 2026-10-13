@@ -220,3 +220,1176 @@ export default function AdminExpedientes() {
       .insert({
         user_id: newExp.user_id,
         titulo: newExp.titulo,
+        descripcion: newExp.descripcion || null,
+        area_juridica: newExp.area_juridica || null,
+        numero_expediente: newExp.numero_expediente || null,
+        numero_radicado: newExp.numero_radicado || null,
+        estado: newExp.estado,
+        prioridad: newExp.prioridad,
+      })
+      .select('*, profiles!expedientes_user_id_profiles_fkey(*)')
+      .single();
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    await logAuditoria('crear_expediente', `Expediente: ${newExp.titulo}`, 'expediente', data.id);
+
+    const client = clientes.find((c) => c.id === newExp.user_id);
+    if (client) {
+      await sendNotification(
+        client.email,
+        'Nuevo expediente creado',
+        `Se ha creado el expediente "${newExp.titulo}" en su cuenta de LEXACASO.`
+      );
+    }
+
+    setShowNewModal(false);
+    setNewExp({
+      user_id: '', titulo: '', descripcion: '', area_juridica: '',
+      numero_expediente: '', numero_radicado: '', estado: 'Recibido', prioridad: 'Media',
+    });
+    doSearch();
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedExp) return;
+    const updates: Record<string, unknown> = {};
+    if (editForm.titulo !== selectedExp.titulo) updates.titulo = editForm.titulo;
+    if (editForm.estado !== selectedExp.estado) {
+      updates.estado = editForm.estado;
+      await supabase.from('historial_expedientes').insert({
+        expediente_id: selectedExp.id,
+        campo: 'estado',
+        valor_anterior: selectedExp.estado,
+        valor_nuevo: editForm.estado,
+      });
+    }
+    if (editForm.prioridad !== selectedExp.prioridad) {
+      updates.prioridad = editForm.prioridad;
+      await supabase.from('historial_expedientes').insert({
+        expediente_id: selectedExp.id,
+        campo: 'prioridad',
+        valor_anterior: selectedExp.prioridad,
+        valor_nuevo: editForm.prioridad,
+      });
+    }
+    if (editForm.descripcion !== selectedExp.descripcion) updates.descripcion = editForm.descripcion;
+    if (editForm.area_juridica !== selectedExp.area_juridica) updates.area_juridica = editForm.area_juridica;
+    if (editForm.numero_radicado !== selectedExp.numero_radicado) updates.numero_radicado = editForm.numero_radicado;
+    if (editForm.entidad_involucrada !== selectedExp.entidad_involucrada) updates.entidad_involucrada = editForm.entidad_involucrada;
+    if (editForm.fecha_hechos !== selectedExp.fecha_hechos) updates.fecha_hechos = editForm.fecha_hechos;
+    if (editForm.pretensiones !== selectedExp.pretensiones) updates.pretensiones = editForm.pretensiones;
+    if (editForm.actuaciones_previas !== selectedExp.actuaciones_previas) updates.actuaciones_previas = editForm.actuaciones_previas;
+    if (editForm.observaciones_adicionales !== selectedExp.observaciones_adicionales) updates.observaciones_adicionales = editForm.observaciones_adicionales;
+
+    if (Object.keys(updates).length > 0) {
+      const { error } = await supabase.from('expedientes').update(updates).eq('id', selectedExp.id);
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      await logAuditoria('editar_expediente', `Expediente: ${selectedExp.titulo}`, 'expediente', selectedExp.id);
+    }
+
+    setEditingExp(false);
+    openExpedienteDetail({ ...selectedExp, ...editForm } as Expediente & { profiles?: Profile });
+    doSearch();
+  };
+
+  const handleImportFiles = async () => {
+    if (!importTarget || importFiles.length === 0) return;
+    setImportRunning(true);
+    const userId = importTarget.user_id;
+
+    const progress = importFiles.map((f) => ({
+      current: 0,
+      total: importFiles.length,
+      name: f.name,
+      status: 'pending' as const,
+      error: undefined as string | undefined,
+    }));
+    setImportProgress(progress);
+
+    for (let i = 0; i < importFiles.length; i++) {
+      const file = importFiles[i];
+      const ext = getFileExtension(file.name).toLowerCase().replace('.', '');
+
+      setImportProgress((prev) =>
+        prev.map((p, idx) => (idx === i ? { ...p, status: 'pending' as const } : p))
+      );
+
+      const validation = validateFile(file);
+      if (!validation.valid) {
+        setImportProgress((prev) =>
+          prev.map((p, idx) =>
+            idx === i ? { ...p, status: 'error' as const, error: validation.error } : p
+          )
+        );
+        continue;
+      }
+
+      if (ext === 'zip') {
+        const result = await extractAndUploadZipFiles(file, importTarget.id, userId, null);
+        setImportProgress((prev) =>
+          prev.map((p, idx) =>
+            idx === i
+              ? {
+                  ...p,
+                  status: result.failed === 0 ? ('success' as const) : ('error' as const),
+                  error: result.errors.join('; ') || undefined,
+                }
+              : p
+          )
+        );
+      } else {
+        const result = await uploadDocument(file, importTarget.id, userId);
+        setImportProgress((prev) =>
+          prev.map((p, idx) =>
+            idx === i
+              ? {
+                  ...p,
+                  status: result.success ? ('success' as const) : ('error' as const),
+                  error: result.error,
+                }
+              : p
+          )
+        );
+      }
+    }
+
+    setImportRunning(false);
+
+    if (selectedExp?.id === importTarget.id) {
+      const { data } = await supabase
+        .from('documentos')
+        .select('*')
+        .eq('expediente_id', importTarget.id)
+        .order('created_at', { ascending: false });
+      if (data) setExpDocumentos(data as Documento[]);
+    }
+
+    await logAuditoria(
+      'importar_documentos',
+      `${importFiles.length} archivo(s) al expediente: ${importTarget.titulo}`,
+      'expediente',
+      importTarget.id
+    );
+    doSearch();
+  };
+
+  const handleZipPreview = async (file: File) => {
+    const result = await previewZipContents(file);
+    if (result.error) {
+      setError(result.error);
+      setZipPreview(null);
+      return;
+    }
+    setZipPreview(result.entries);
+    setZipSelectedFiles(result.entries.map((e) => e.name));
+    setZipFileName(file.name);
+  };
+
+  const handleDownloadDoc = async (doc: Documento) => {
+    const result = await downloadDocument(doc);
+    if (!result.success) {
+      setError(result.error || 'Error al descargar');
+    } else {
+      await logAuditoria('descargar_documento', `Documento: ${doc.nombre}`, 'documento', doc.id);
+    }
+  };
+
+  const handleExportDocx = async () => {
+    if (!exportTarget) return;
+    const [docRes, obsRes, segRes, histRes, anaRes] = await Promise.all([
+      supabase.from('documentos').select('*').eq('expediente_id', exportTarget.id).order('created_at', { ascending: false }),
+      supabase.from('observaciones').select('*').eq('expediente_id', exportTarget.id).order('created_at', { ascending: false }),
+      supabase.from('seguimientos').select('*').eq('expediente_id', exportTarget.id).order('fecha_actuacion', { ascending: false }),
+      supabase.from('historial_expedientes').select('*').eq('expediente_id', exportTarget.id).order('created_at', { ascending: false }),
+      supabase.from('analisis_juridicos').select('*').eq('expediente_id', exportTarget.id).order('creado_en', { ascending: false }),
+    ]);
+
+    const fullExp = {
+      ...exportTarget,
+      documentos: docRes.data || [],
+      observaciones: (obsRes.data || []) as Observacion[],
+      seguimientos: (segRes.data || []) as Seguimiento[],
+      historial: (histRes.data || []) as HistorialEntry[],
+      analisis: (anaRes.data || []) as AnalisisJuridico[],
+    };
+
+    await exportExpedienteToDocx(fullExp, exportOptions);
+    await logAuditoria('exportar_docx', `Expediente: ${exportTarget.titulo}`, 'expediente', exportTarget.id);
+    setShowExportModal(false);
+  };
+
+  const handleExportXlsx = async () => {
+    await exportExpedientesToXlsx(expedientes);
+    await logAuditoria('exportar_xlsx', `${expedientes.length} expedientes`, 'expediente', null);
+  };
+
+  const handleExportZip = async () => {
+    if (!exportTarget) return;
+    const docs = expDocumentos.length > 0 ? expDocumentos : [];
+    if (docs.length === 0) {
+      const { data } = await supabase.from('documentos').select('*').eq('expediente_id', exportTarget.id);
+      if (data) {
+        const result = await exportDocumentosToZip(data as Documento[], exportTarget.titulo);
+        if (!result.success) setError(result.error || 'Error');
+      }
+    } else {
+      const result = await exportDocumentosToZip(docs, exportTarget.titulo);
+      if (!result.success) setError(result.error || 'Error');
+    }
+    await logAuditoria('exportar_zip', `Documentos del expediente: ${exportTarget.titulo}`, 'expediente', exportTarget.id);
+  };
+
+  const handleAddObservacion = async () => {
+    if (!selectedExp || !newObservacion.trim()) return;
+    const { error } = await supabase.from('observaciones').insert({
+      expediente_id: selectedExp.id,
+      contenido: newObservacion,
+      visible_cliente: obsVisible,
+    });
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setNewObservacion('');
+    setObsVisible(false);
+    const { data } = await supabase.from('observaciones').select('*, autor:profiles!observaciones_autor_id_fkey(*)').eq('expediente_id', selectedExp.id).order('created_at', { ascending: false });
+    if (data) setExpObservaciones(data as Observacion[]);
+  };
+
+  const handleAddSeguimiento = async () => {
+    if (!selectedExp || !newSeguimiento.tipo_actuacion || !newSeguimiento.descripcion) return;
+    const { error } = await supabase.from('seguimientos').insert({
+      expediente_id: selectedExp.id,
+      tipo_actuacion: newSeguimiento.tipo_actuacion,
+      descripcion: newSeguimiento.descripcion,
+      fecha_actuacion: newSeguimiento.fecha_actuacion,
+      fecha_vencimiento: newSeguimiento.fecha_vencimiento || null,
+      estado: newSeguimiento.estado,
+    });
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setNewSeguimiento({
+      tipo_actuacion: '', descripcion: '',
+      fecha_actuacion: new Date().toISOString().split('T')[0],
+      fecha_vencimiento: '', estado: 'Pendiente',
+    });
+    const { data } = await supabase.from('seguimientos').select('*').eq('expediente_id', selectedExp.id).order('fecha_actuacion', { ascending: false });
+    if (data) setExpSeguimientos(data as Seguimiento[]);
+  };
+
+  const handleSendDocument = async () => {
+    if (!sendDocFile || !selectedExp) return;
+    const validation = validateFile(sendDocFile);
+    if (!validation.valid) {
+      setError(validation.error || 'Error de validación');
+      return;
+    }
+
+    const ext = getFileExtension(sendDocFile.name);
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    const filePath = `${selectedExp.user_id}/${selectedExp.id}/${timestamp}-${random}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage.from('documentos').upload(filePath, sendDocFile);
+    if (uploadError) {
+      setError(uploadError.message);
+      return;
+    }
+
+    const { error: dbError } = await supabase.from('documentos').insert({
+      expediente_id: selectedExp.id,
+      user_id: selectedExp.user_id,
+      nombre: sendDocFile.name,
+      ruta_storage: filePath,
+      tipo_mime: sendDocFile.type || 'application/octet-stream',
+      tamano_bytes: sendDocFile.size,
+      extension: ext,
+      visible_cliente: sendDocClasificacion === 'entregable',
+      remitente_id: selectedExp.user_id,
+      mensaje_admin: sendDocMessage || null,
+    });
+
+    if (dbError) {
+      await supabase.storage.from('documentos').remove([filePath]);
+      setError(dbError.message);
+      return;
+    }
+
+    await logAuditoria('enviar_documento', `Documento: ${sendDocFile.name} al expediente: ${selectedExp.titulo}`, 'documento', null);
+
+    const client = selectedExp.profiles;
+    if (client && sendDocClasificacion === 'entregable') {
+      await sendNotification(
+        client.email,
+        'Nuevo documento disponible',
+        `Tiene un nuevo documento "${sendDocFile.name}" en su expediente "${selectedExp.titulo}". ${sendDocMessage || ''}`
+      );
+    }
+
+    setShowSendDocModal(false);
+    setSendDocFile(null);
+    setSendDocMessage('');
+    setSendDocClasificacion('entregable');
+
+    const { data } = await supabase.from('documentos').select('*').eq('expediente_id', selectedExp.id).order('created_at', { ascending: false });
+    if (data) setExpDocumentos(data as Documento[]);
+  };
+
+  const viewClientProfile = async (profile: Profile) => {
+    setClientProfile(profile);
+    const { data } = await supabase.from('expedientes').select('*').eq('user_id', profile.id).order('created_at', { ascending: false });
+    if (data) setClientExpedientes(data as Expediente[]);
+  };
+
+  const totalPages = Math.ceil(total / perPage);
+
+  return (
+    <div className="admin-expedientes">
+      <div className="page-header">
+        <h1>Gestión de Expedientes</h1>
+        <p>Busque, filtre y administre todos los expedientes</p>
+      </div>
+
+      {error && (
+        <div className="alert alert-error">
+          {error}
+          <button className="alert-close" onClick={() => setError(null)}>×</button>
+        </div>
+      )}
+
+      {/* Search & Filters Bar */}
+      <div className="search-bar">
+        <div className="search-row">
+          <input
+            type="text"
+            className="search-input"
+            placeholder="Buscar por título, descripción, número de expediente, radicado, nombre o cédula del cliente…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          />
+        </div>
+        <div className="filter-row">
+          <select value={filterCliente} onChange={(e) => setFilterCliente(e.target.value)} className="filter-select">
+            <option value="">Todos los clientes</option>
+            {clientes.map((c) => (
+              <option key={c.id} value={c.id}>{c.nombre_completo}</option>
+            ))}
+          </select>
+          <select value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)} className="filter-select">
+            <option value="">Todos los estados</option>
+            {estados.map((e) => (
+              <option key={e.id} value={e.nombre}>{e.nombre}</option>
+            ))}
+          </select>
+          <input type="date" value={filterFechaDesde} onChange={(e) => setFilterFechaDesde(e.target.value)} className="filter-date" title="Desde" />
+          <input type="date" value={filterFechaHasta} onChange={(e) => setFilterFechaHasta(e.target.value)} className="filter-date" title="Hasta" />
+          <button className="btn btn-primary btn-sm" onClick={handleSearch} disabled={loading}>Buscar</button>
+          <button className="btn btn-secondary btn-sm" onClick={handleClear}>Limpiar</button>
+        </div>
+        <div className="action-row">
+          <button className="btn btn-secondary btn-sm" onClick={() => { setImportTarget(null); setImportFiles([]); setShowImportModal(true); }}>
+            Importar documentos
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={handleExportXlsx} disabled={expedientes.length === 0}>
+            Exportar XLSX
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => exportExpedientesToCsv(expedientes)} disabled={expedientes.length === 0}>
+            Exportar CSV
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowNewModal(true)}>
+            Nuevo expediente
+          </button>
+        </div>
+      </div>
+
+      {/* Results count */}
+      <div className="results-info">
+        {loading ? 'Buscando…' : `${total} resultado(s)`}
+      </div>
+
+      {/* Results table */}
+      {loading ? (
+        <div className="loading-state">Cargando expedientes…</div>
+      ) : expedientes.length === 0 ? (
+        <div className="empty-state">
+          <p>{hasSearched ? 'No se encontraron expedientes con los criterios especificados.' : 'No hay expedientes registrados.'}</p>
+        </div>
+      ) : (
+        <div className="table-container">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Título</th>
+                <th>Cliente</th>
+                <th>N° Expediente</th>
+                <th>N° Radicado</th>
+                <th>Estado</th>
+                <th>Prioridad</th>
+                <th>Documentos</th>
+                <th>Fecha</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {expedientes.map((exp) => (
+                <tr key={exp.id}>
+                  <td className="cell-title">{exp.titulo}</td>
+                  <td>
+                    <button className="link-btn" onClick={() => exp.profiles && viewClientProfile(exp.profiles)}>
+                      {exp.profiles?.nombre_completo || '—'}
+                    </button>
+                  </td>
+                  <td>{exp.numero_expediente || '—'}</td>
+                  <td>{exp.numero_radicado || '—'}</td>
+                  <td>
+                    <span className="badge badge-status" style={{
+                      backgroundColor: estados.find((e) => e.nombre === exp.estado)?.color || '#6b7280'
+                    }}>
+                      {exp.estado}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`badge badge-priority priority-${exp.prioridad.toLowerCase()}`}>{exp.prioridad}</span>
+                  </td>
+                  <td>—</td>
+                  <td>{new Date(exp.created_at).toLocaleDateString('es-CO')}</td>
+                  <td className="actions-cell">
+                    <button className="btn-icon" title="Ver expediente" onClick={() => openExpedienteDetail(exp)}>Ver</button>
+                    <button className="btn-icon" title="Importar documentos" onClick={() => {
+                      setImportTarget(exp);
+                      setImportFiles([]);
+                      setShowImportModal(true);
+                    }}>Importar</button>
+                    <button className="btn-icon" title="Exportar" onClick={() => {
+                      setExportTarget(exp);
+                      setShowExportModal(true);
+                    }}>Exportar</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="pagination">
+          <button disabled={page === 1} onClick={() => setPage(page - 1)}>Anterior</button>
+          <span>Página {page} de {totalPages}</span>
+          <button disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Siguiente</button>
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      <Modal open={!!selectedExp} onClose={() => setSelectedExp(null)} title={selectedExp?.titulo || ''} size="xl">
+        {selectedExp && (
+          <div className="expediente-detail">
+            <div className="detail-tabs">
+              <button className={detailTab === 'info' ? 'active' : ''} onClick={() => setDetailTab('info')}>Información</button>
+              <button className={detailTab === 'documentos' ? 'active' : ''} onClick={() => setDetailTab('documentos')}>Documentos ({expDocumentos.length})</button>
+              <button className={detailTab === 'seguimientos' ? 'active' : ''} onClick={() => setDetailTab('seguimientos')}>Actuaciones ({expSeguimientos.length})</button>
+              <button className={detailTab === 'observaciones' ? 'active' : ''} onClick={() => setDetailTab('observaciones')}>Observaciones ({expObservaciones.length})</button>
+              <button className={detailTab === 'historial' ? 'active' : ''} onClick={() => setDetailTab('historial')}>Historial ({expHistorial.length})</button>
+              <button className={detailTab === 'analisis' ? 'active' : ''} onClick={() => setDetailTab('analisis')}>Análisis ({expAnalisis.length})</button>
+              <button className={detailTab === 'comentarios' ? 'active' : ''} onClick={() => setDetailTab('comentarios')}>Comentarios</button>
+              <button className={detailTab === 'herramientas' ? 'active' : ''} onClick={() => setDetailTab('herramientas')}>Herramientas</button>
+            </div>
+
+            {detailLoading ? (
+              <div className="loading-state">Cargando detalle…</div>
+            ) : (
+              <>
+                {/* INFO TAB */}
+                {detailTab === 'info' && (
+                  <div className="detail-section">
+                    {editingExp ? (
+                      <div className="edit-form">
+                        <div className="form-group">
+                          <label>Título</label>
+                          <input value={editForm.titulo || ''} onChange={(e) => setEditForm({ ...editForm, titulo: e.target.value })} />
+                        </div>
+                        <div className="form-row">
+                          <div className="form-group">
+                            <label>Estado</label>
+                            <select value={editForm.estado || ''} onChange={(e) => setEditForm({ ...editForm, estado: e.target.value })}>
+                              {estados.map((e) => <option key={e.id} value={e.nombre}>{e.nombre}</option>)}
+                            </select>
+                          </div>
+                          <div className="form-group">
+                            <label>Prioridad</label>
+                            <select value={editForm.prioridad || ''} onChange={(e) => setEditForm({ ...editForm, prioridad: e.target.value })}>
+                              {PRIORIDADES.map((p) => <option key={p.id} value={p.label}>{p.label}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="form-row">
+                          <div className="form-group">
+                            <label>N° Radicado</label>
+                            <input value={editForm.numero_radicado || ''} onChange={(e) => setEditForm({ ...editForm, numero_radicado: e.target.value })} />
+                          </div>
+                          <div className="form-group">
+                            <label>Área Jurídica</label>
+                            <input value={editForm.area_juridica || ''} onChange={(e) => setEditForm({ ...editForm, area_juridica: e.target.value })} />
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label>Descripción</label>
+                          <textarea value={editForm.descripcion || ''} onChange={(e) => setEditForm({ ...editForm, descripcion: e.target.value })} rows={4} />
+                        </div>
+                        <div className="form-row">
+                          <div className="form-group">
+                            <label>Entidad involucrada</label>
+                            <input value={editForm.entidad_involucrada || ''} onChange={(e) => setEditForm({ ...editForm, entidad_involucrada: e.target.value })} />
+                          </div>
+                          <div className="form-group">
+                            <label>Fecha de los hechos</label>
+                            <input type="date" value={editForm.fecha_hechos || ''} onChange={(e) => setEditForm({ ...editForm, fecha_hechos: e.target.value })} />
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label>Pretensiones</label>
+                          <textarea value={editForm.pretensiones || ''} onChange={(e) => setEditForm({ ...editForm, pretensiones: e.target.value })} rows={2} />
+                        </div>
+                        <div className="form-group">
+                          <label>Actuaciones previas</label>
+                          <textarea value={editForm.actuaciones_previas || ''} onChange={(e) => setEditForm({ ...editForm, actuaciones_previas: e.target.value })} rows={2} />
+                        </div>
+                        <div className="form-group">
+                          <label>Observaciones adicionales</label>
+                          <textarea value={editForm.observaciones_adicionales || ''} onChange={(e) => setEditForm({ ...editForm, observaciones_adicionales: e.target.value })} rows={2} />
+                        </div>
+                        <div className="form-actions">
+                          <button className="btn btn-primary btn-sm" onClick={handleSaveEdit}>Guardar</button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => { setEditingExp(false); setEditForm(selectedExp); }}>Cancelar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="info-grid">
+                          <div className="info-item">
+                            <span className="info-label">Cliente</span>
+                            <span className="info-value">
+                              <button className="link-btn" onClick={() => selectedExp.profiles && viewClientProfile(selectedExp.profiles)}>
+                                {selectedExp.profiles?.nombre_completo || '—'}
+                              </button>
+                            </span>
+                          </div>
+                          <div className="info-item">
+                            <span className="info-label">N° Expediente</span>
+                            <span className="info-value">{selectedExp.numero_expediente || '—'}</span>
+                          </div>
+                          <div className="info-item">
+                            <span className="info-label">N° Radicado</span>
+                            <span className="info-value">{selectedExp.numero_radicado || '—'}</span>
+                          </div>
+                          <div className="info-item">
+                            <span className="info-label">Estado</span>
+                            <span className="info-value">
+                              <span className="badge badge-status" style={{ backgroundColor: estados.find((e) => e.nombre === selectedExp.estado)?.color || '#6b7280' }}>
+                                {selectedExp.estado}
+                              </span>
+                            </span>
+                          </div>
+                          <div className="info-item">
+                            <span className="info-label">Prioridad</span>
+                            <span className="info-value">{selectedExp.prioridad}</span>
+                          </div>
+                          <div className="info-item">
+                            <span className="info-label">Área Jurídica</span>
+                            <span className="info-value">{selectedExp.area_juridica || '—'}</span>
+                          </div>
+                          <div className="info-item">
+                            <span className="info-label">Fecha de creación</span>
+                            <span className="info-value">{new Date(selectedExp.created_at).toLocaleDateString('es-CO')}</span>
+                          </div>
+                          <div className="info-item">
+                            <span className="info-label">Última actualización</span>
+                            <span className="info-value">{new Date(selectedExp.updated_at).toLocaleDateString('es-CO')}</span>
+                          </div>
+                        </div>
+                        {selectedExp.entidad_involucrada && (
+                          <div className="info-item">
+                            <span className="info-label">Entidad involucrada</span>
+                            <span className="info-value">{selectedExp.entidad_involucrada}</span>
+                          </div>
+                        )}
+                        {selectedExp.fecha_hechos && (
+                          <div className="info-item">
+                            <span className="info-label">Fecha de los hechos</span>
+                            <span className="info-value">{selectedExp.fecha_hechos}</span>
+                          </div>
+                        )}
+                        {selectedExp.descripcion && (
+                          <div className="info-block">
+                            <h4>Descripción de los hechos</h4>
+                            <p>{selectedExp.descripcion}</p>
+                          </div>
+                        )}
+                        {selectedExp.pretensiones && (
+                          <div className="info-block">
+                            <h4>Pretensiones</h4>
+                            <p>{selectedExp.pretensiones}</p>
+                          </div>
+                        )}
+                        {selectedExp.actuaciones_previas && (
+                          <div className="info-block">
+                            <h4>Actuaciones previas</h4>
+                            <p>{selectedExp.actuaciones_previas}</p>
+                          </div>
+                        )}
+                        {selectedExp.observaciones_adicionales && (
+                          <div className="info-block">
+                            <h4>Observaciones adicionales</h4>
+                            <p>{selectedExp.observaciones_adicionales}</p>
+                          </div>
+                        )}
+                        {selectedExp.profiles && (
+                          <div className="info-block">
+                            <h4>Datos del cliente</h4>
+                            <div className="info-grid">
+                              <div className="info-item">
+                                <span className="info-label">Email</span>
+                                <span className="info-value">{selectedExp.profiles.email}</span>
+                              </div>
+                              <div className="info-item">
+                                <span className="info-label">Cédula</span>
+                                <span className="info-value">{selectedExp.profiles.cedula || '—'}</span>
+                              </div>
+                              <div className="info-item">
+                                <span className="info-label">Celular</span>
+                                <span className="info-value">{selectedExp.profiles.celular || '—'}</span>
+                              </div>
+                              <div className="info-item">
+                                <span className="info-label">Dirección</span>
+                                <span className="info-value">{selectedExp.profiles.direccion || '—'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        <div className="form-actions">
+                          <button className="btn btn-primary btn-sm" onClick={() => setEditingExp(true)}>Editar</button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => { setImportTarget(selectedExp); setImportFiles([]); setShowImportModal(true); }}>Importar documentos</button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => { setSendDocFile(null); setShowSendDocModal(true); }}>Enviar documento al cliente</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* DOCUMENTOS TAB */}
+                {detailTab === 'documentos' && (
+                  <div className="detail-section">
+                    <div className="section-actions">
+                      <button className="btn btn-secondary btn-sm" onClick={() => {
+                        setImportTarget(selectedExp);
+                        setImportFiles([]);
+                        setShowImportModal(true);
+                      }}>Importar documentos</button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => {
+                        setExportTarget(selectedExp);
+                        setShowExportModal(true);
+                      }}>Exportar documentos (ZIP)</button>
+                    </div>
+                    {expDocumentos.length === 0 ? (
+                      <div className="empty-state"><p>No hay documentos en este expediente.</p></div>
+                    ) : (
+                      <div className="documentos-list">
+                        {expDocumentos.map((doc) => (
+                          <div key={doc.id} className="documento-item">
+                            <div className="doc-info">
+                              <span className="doc-name">{doc.nombre}</span>
+                              <span className="doc-meta">{formatBytes(doc.tamano_bytes)} · {doc.extension?.toUpperCase()} · {new Date(doc.created_at).toLocaleDateString('es-CO')}</span>
+                              {doc.mensaje_admin && <span className="doc-message">Mensaje: {doc.mensaje_admin}</span>}
+                              <span className="doc-badges">
+                                {doc.visible_cliente ? (
+                                  <span className="badge badge-green">Visible al cliente</span>
+                                ) : (
+                                  <span className="badge badge-gray">Interno</span>
+                                )}
+                                {doc.consultado ? (
+                                  <span className="badge badge-blue">Consultado</span>
+                                ) : (
+                                  <span className="badge badge-orange">Nuevo</span>
+                                )}
+                              </span>
+                            </div>
+                            <div className="doc-actions">
+                              <button className="btn btn-secondary btn-sm" onClick={() => handleDownloadDoc(doc)}>Descargar</button>
+                              <button className="btn-icon btn-danger" title="Eliminar documento" onClick={async () => {
+                                if (!confirm(`¿Eliminar el documento "${doc.nombre}"? Esta acción no se puede deshacer.`)) return;
+                                const result = await deleteDocument(doc);
+                                if (!result.success) {
+                                  setError(result.error || 'Error al eliminar');
+                                } else {
+                                  await logAuditoria('eliminar_documento', `Documento: ${doc.nombre}`, 'documento', doc.id);
+                                  setExpDocumentos(expDocumentos.filter((d) => d.id !== doc.id));
+                                }
+                              }}>Eliminar</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* SEGUIMIENTOS TAB */}
+                {detailTab === 'seguimientos' && (
+                  <div className="detail-section">
+                    <div className="inline-form">
+                      <select value={newSeguimiento.tipo_actuacion} onChange={(e) => setNewSeguimiento({ ...newSeguimiento, tipo_actuacion: e.target.value })}>
+                        <option value="">Tipo de actuación…</option>
+                        {tiposActuacion.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      <input type="text" placeholder="Descripción" value={newSeguimiento.descripcion} onChange={(e) => setNewSeguimiento({ ...newSeguimiento, descripcion: e.target.value })} />
+                      <input type="date" value={newSeguimiento.fecha_actuacion} onChange={(e) => setNewSeguimiento({ ...newSeguimiento, fecha_actuacion: e.target.value })} />
+                      <input type="date" placeholder="Vencimiento" value={newSeguimiento.fecha_vencimiento} onChange={(e) => setNewSeguimiento({ ...newSeguimiento, fecha_vencimiento: e.target.value })} />
+                      <select value={newSeguimiento.estado} onChange={(e) => setNewSeguimiento({ ...newSeguimiento, estado: e.target.value })}>
+                        <option value="Pendiente">Pendiente</option>
+                        <option value="En proceso">En proceso</option>
+                        <option value="Completado">Completado</option>
+                      </select>
+                      <button className="btn btn-primary btn-sm" onClick={handleAddSeguimiento}>Agregar</button>
+                    </div>
+                    {expSeguimientos.length === 0 ? (
+                      <div className="empty-state"><p>No hay actuaciones registradas.</p></div>
+                    ) : (
+                      <div className="timeline">
+                        {expSeguimientos.map((seg) => (
+                          <div key={seg.id} className="timeline-item">
+                            <div className="timeline-marker"></div>
+                            <div className="timeline-content">
+                              <div className="timeline-header">
+                                <strong>{seg.tipo_actuacion}</strong>
+                                <span className="badge badge-status" style={{ backgroundColor: seg.estado === 'Completado' ? '#10b981' : seg.estado === 'En proceso' ? '#f59e0b' : '#6b7280' }}>{seg.estado}</span>
+                              </div>
+                              <p>{seg.descripcion}</p>
+                              <div className="timeline-meta">
+                                <span>Fecha: {seg.fecha_actuacion}</span>
+                                {seg.fecha_vencimiento && <span>Vencimiento: {seg.fecha_vencimiento}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* OBSERVACIONES TAB */}
+                {detailTab === 'observaciones' && (
+                  <div className="detail-section">
+                    <div className="inline-form">
+                      <input type="text" placeholder="Nueva observación…" value={newObservacion} onChange={(e) => setNewObservacion(e.target.value)} />
+                      <label className="checkbox-inline">
+                        <input type="checkbox" checked={obsVisible} onChange={(e) => setObsVisible(e.target.checked)} />
+                        Visible al cliente
+                      </label>
+                      <button className="btn btn-primary btn-sm" onClick={handleAddObservacion}>Agregar</button>
+                    </div>
+                    {expObservaciones.length === 0 ? (
+                      <div className="empty-state"><p>No hay observaciones.</p></div>
+                    ) : (
+                      <div className="observaciones-list">
+                        {expObservaciones.map((obs) => (
+                          <div key={obs.id} className="observacion-item">
+                            <p>{obs.contenido}</p>
+                            <div className="obs-meta">
+                              <span>{obs.autor?.nombre_completo || 'Admin'}</span>
+                              <span>{new Date(obs.created_at).toLocaleDateString('es-CO')}</span>
+                              {obs.visible_cliente ? (
+                                <span className="badge badge-green">Visible</span>
+                              ) : (
+                                <span className="badge badge-gray">Interna</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* HISTORIAL TAB */}
+                {detailTab === 'historial' && (
+                  <div className="detail-section">
+                    {expHistorial.length === 0 ? (
+                      <div className="empty-state"><p>No hay cambios registrados.</p></div>
+                    ) : (
+                      <div className="historial-list">
+                        {expHistorial.map((h) => (
+                          <div key={h.id} className="historial-item">
+                            <span className="hist-field">{h.campo}</span>
+                            <span className="hist-change">{h.valor_anterior || '(vacío)'} → {h.valor_nuevo || '(vacío)'}</span>
+                            <span className="hist-date">{new Date(h.created_at).toLocaleDateString('es-CO')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* COMENTARIOS TAB */}
+                {detailTab === 'comentarios' && (
+                  <div className="detail-section">
+                    <Comentarios expedienteId={selectedExp.id} isAdmin={true} />
+                  </div>
+                )}
+
+                {/* HERRAMIENTAS TAB */}
+                {detailTab === 'herramientas' && (
+                  <div className="detail-section">
+                    <HerramientasJuridicas
+                      expedienteId={selectedExp.id}
+                      expedienteTitulo={selectedExp.titulo}
+                      onAnalisisChanged={async () => {
+                        const { data } = await supabase.from('analisis_juridicos').select('*').eq('expediente_id', selectedExp.id).order('creado_en', { ascending: false });
+                        if (data) setExpAnalisis(data as AnalisisJuridico[]);
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* ANALISIS TAB */}
+                {detailTab === 'analisis' && (
+                  <div className="detail-section">
+                    <div className="analisis-form">
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label>Tipo de análisis</label>
+                          <select value={newAnalisis.tipo} onChange={(e) => setNewAnalisis({ ...newAnalisis, tipo: e.target.value as 'estructurado' | 'ia' | 'jurisprudencia' })}>
+                            <option value="estructurado">Estructurado (manual)</option>
+                            <option value="ia">Con inteligencia artificial</option>
+                            <option value="jurisprudencia">Búsqueda jurisprudencial</option>
+                          </select>
+                        </div>
+                        <div className="form-group">
+                          <label>Título</label>
+                          <input value={newAnalisis.titulo} onChange={(e) => setNewAnalisis({ ...newAnalisis, titulo: e.target.value })} placeholder="Título del análisis" />
+                        </div>
+                      </div>
+                      <div className="form-group">
+                        <label>Contenido del análisis</label>
+                        <textarea value={newAnalisis.contenido} onChange={(e) => setNewAnalisis({ ...newAnalisis, contenido: e.target.value })} rows={5} placeholder="Escriba el análisis jurídico del caso…" />
+                      </div>
+                      <div className="form-actions">
+                        <button className="btn btn-primary btn-sm" onClick={async () => {
+                          if (!selectedExp || !newAnalisis.contenido.trim()) return;
+                          const { error } = await supabase.from('analisis_juridicos').insert({
+                            expediente_id: selectedExp.id,
+                            tipo: newAnalisis.tipo,
+                            titulo: newAnalisis.titulo || 'Análisis jurídico',
+                            contenido: newAnalisis.contenido,
+                            resumen: newAnalisis.resumen || null,
+                          });
+                          if (error) { setError(error.message); return; }
+                          await logAuditoria('crear_analisis', `Análisis: ${newAnalisis.titulo}`, 'analisis', null);
+                          setNewAnalisis({ tipo: 'estructurado', titulo: '', contenido: '', resumen: '' });
+                          const { data } = await supabase.from('analisis_juridicos').select('*').eq('expediente_id', selectedExp.id).order('creado_en', { ascending: false });
+                          if (data) setExpAnalisis(data as AnalisisJuridico[]);
+                        }}>Guardar análisis</button>
+                      </div>
+                    </div>
+
+                    {expAnalisis.length === 0 ? (
+                      <div className="empty-state"><p>No hay análisis jurídicos guardados.</p></div>
+                    ) : (
+                      <div className="analisis-list">
+                        {expAnalisis.map((a) => (
+                          <div key={a.id} className="analisis-item">
+                            <div className="analisis-header">
+                              <strong>{a.titulo}</strong>
+                              <span className={`badge ${a.tipo === 'ia' ? 'badge-gold' : a.tipo === 'jurisprudencia' ? 'badge-blue' : 'badge-green'}`}>{a.tipo}</span>
+                            </div>
+                            <p className="analisis-content">{a.contenido}</p>
+                            <div className="analisis-meta">
+                              <span>{new Date(a.creado_en).toLocaleDateString('es-CO')}</span>
+                              <button className="btn-icon btn-danger" onClick={async () => {
+                                const { error } = await supabase.from('analisis_juridicos').delete().eq('id', a.id);
+                                if (error) { setError(error.message); return; }
+                                setExpAnalisis(expAnalisis.filter((x) => x.id !== a.id));
+                              }}>Eliminar</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* New Expediente Modal */}
+      <Modal open={showNewModal} onClose={() => setShowNewModal(false)} title="Nuevo expediente" size="md">
+        <div className="form-group">
+          <label>Cliente *</label>
+          <select value={newExp.user_id} onChange={(e) => setNewExp({ ...newExp, user_id: e.target.value })}>
+            <option value="">Seleccione un cliente…</option>
+            {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre_completo} ({c.email})</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Título *</label>
+          <input value={newExp.titulo} onChange={(e) => setNewExp({ ...newExp, titulo: e.target.value })} placeholder="Título del caso" />
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>N° Expediente</label>
+            <input value={newExp.numero_expediente} onChange={(e) => setNewExp({ ...newExp, numero_expediente: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label>N° Radicado</label>
+            <input value={newExp.numero_radicado} onChange={(e) => setNewExp({ ...newExp, numero_radicado: e.target.value })} />
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Estado</label>
+            <select value={newExp.estado} onChange={(e) => setNewExp({ ...newExp, estado: e.target.value })}>
+              {estados.map((e) => <option key={e.id} value={e.nombre}>{e.nombre}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Prioridad</label>
+            <select value={newExp.prioridad} onChange={(e) => setNewExp({ ...newExp, prioridad: e.target.value })}>
+              {PRIORIDADES.map((p) => <option key={p.id} value={p.label}>{p.label}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="form-group">
+          <label>Área Jurídica</label>
+          <input value={newExp.area_juridica} onChange={(e) => setNewExp({ ...newExp, area_juridica: e.target.value })} placeholder="Ej: Derecho Civil" />
+        </div>
+        <div className="form-group">
+          <label>Descripción</label>
+          <textarea value={newExp.descripcion} onChange={(e) => setNewExp({ ...newExp, descripcion: e.target.value })} rows={4} placeholder="Descripción del caso" />
+        </div>
+        <div className="form-actions">
+          <button className="btn btn-primary" onClick={handleCreateExpediente}>Crear expediente</button>
+          <button className="btn btn-secondary" onClick={() => setShowNewModal(false)}>Cancelar</button>
+        </div>
+      </Modal>
+
+      {/* Import Modal */}
+      <Modal open={showImportModal} onClose={() => !importRunning && setShowImportModal(false)} title={importTarget ? `Importar a: ${importTarget.titulo}` : 'Importar documentos'} size="lg">
+        {!importTarget && (
+          <div className="form-group">
+            <label>Seleccione el expediente destino</label>
+            <select onChange={(e) => {
+              const exp = expedientes.find((ex) => ex.id === e.target.value);
+              if (exp) setImportTarget(exp);
+            }}>
+              <option value="">Seleccione…</option>
+              {expedientes.map((e) => <option key={e.id} value={e.id}>{e.titulo}</option>)}
+            </select>
+          </div>
+        )}
+        {importTarget && (
+          <>
+            <div className="import-zone">
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.rar,.jpg,.jpeg,.png"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  setImportFiles(files);
+                  setImportProgress([]);
+                  setZipPreview(null);
+                  if (files.length === 1 && getFileExtension(files[0].name) === 'zip') {
+                    handleZipPreview(files[0]);
+                  }
+                }}
+                disabled={importRunning}
+              />
+              <p className="import-hint">Formatos permitidos: PDF, DOC, DOCX, XLS, XLSX, ZIP, RAR, JPG, PNG (máx. 50MB)</p>
+            </div>
+
+            {/* ZIP Preview */}
+            {zipPreview && (
+              <div className="zip-preview">
+                <h4>Contenido del ZIP: {zipFileName}</h4>
+                <p>Seleccione los archivos a importar:</p>
+                <div className="zip-file-list">
+                  {zipPreview.map((entry) => (
+                    <label key={entry.name} className="zip-file-item">
+                      <input
+                        type="checkbox"
+                        checked={zipSelectedFiles.includes(entry.name)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setZipSelectedFiles([...zipSelectedFiles, entry.name]);
+                          } else {
+                            setZipSelectedFiles(zipSelectedFiles.filter((n) => n !== entry.name));
+                          }
+                        }}
+                      />
+                      <span>{entry.name}</span>
+                      <span className="zip-file-size">{formatBytes(entry.size)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Progress */}
+            {importProgress.length > 0 && (
+              <div className="import-progress">
+                {importProgress.map((p, i) => (
+                  <div key={i} className={`progress-item progress-${p.status}`}>
+                    <span className="progress-name">{p.name}</span>
+                    <span className="progress-status">
+                      {p.status === 'pending' && '⏳ Procesando…'}
+                      {p.status === 'success' && '✓ Subido'}
+                      {p.status === 'error' && `✗ ${p.error || 'Error'}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="form-actions">
+              <button
+                className="btn btn-primary"
+                onClick={handleImportFiles}
+                disabled={importFiles.length === 0 || importRunning}
+              >
+                {importRunning ? 'Importando…' : `Importar ${importFiles.length} archivo(s)`}
+              </button>
+              <button className="btn btn-secondary" onClick={() => { if (!importRunning) setShowImportModal(false); }} disabled={importRunning}>
+                Cerrar
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
+
+      {/* Export Modal */}
+      <Modal open={showExportModal} onClose={() => setShowExportModal(false)} title={exportTarget ? `Exportar: ${exportTarget.titulo}` : 'Exportar'} size="md">
+        {exportTarget && (
+          <div className="export-options">
+            <h4>Exportar a Word (DOCX)</h4>
+            <p>Seleccione qué secciones incluir:</p>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={exportOptions.incluirDocumentos} onChange={(e) => setExportOptions({ ...exportOptions, incluirDocumentos: e.target.checked })} />
+              <span>Lista de documentos</span>
+            </label>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={exportOptions.incluirSeguimientos} onChange={(e) => setExportOptions({ ...exportOptions, incluirSeguimientos: e.target.checked })} />
+              <span>Actuaciones / seguimientos</span>
+            </label>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={exportOptions.incluirObservaciones} onChange={(e) => setExportOptions({ ...exportOptions, incluirObservaciones: e.target.checked })} />
+              <span>Observaciones visibles</span>
+            </label>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={exportOptions.incluirHistorial} onChange={(e) => setExportOptions({ ...exportOptions, incluirHistorial: e.target.checked })} />
+              <span>Historial de cambios</span>
+            </label>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={exportOptions.incluirAnalisis} onChange={(e) => setExportOptions({ ...exportOptions, incluirAnalisis: e.target.checked })} />
+              <span>Análisis jurídico</span>
+            </label>
+            <div className="form-actions">
+              <button className="btn btn-primary" onClick={handleExportDocx}>Exportar a Word</button>
+              <button className="btn btn-secondary" onClick={handleExportZip}>Exportar documentos (ZIP)</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Send Document Modal */}
+      <Modal open={showSendDocModal} onClose={() => setShowSendDocModal(false)} title="Enviar documento al cliente" size="md">
+        <div className="form-group">
+          <label>Archivo</label>
+          <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.rar,.jpg,.jpeg,.png" onChange={(e) => setSendDocFile(e.target.files?.[0] || null)} />
+        </div>
+        <div className="form-group">
+          <label>Clasificación</label>
+          <select value={sendDocClasificacion} onChange={(e) => setSendDocClasificacion(e.target.value as 'entregable' | 'interno')}>
+            <option value="entregable">Entregable (visible al cliente)</option>
+            <option value="interno">Interno (no visible al cliente)</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Mensaje para el cliente</label>
+          <textarea value={sendDocMessage} onChange={(e) => setSendDocMessage(e.target.value)} rows={3} placeholder="Mensaje opcional" />
+        </div>
+        <div className="form-actions">
+          <button className="btn btn-primary" onClick={handleSendDocument} disabled={!sendDocFile}>Enviar</button>
+          <button className="btn btn-secondary" onClick={() => setShowSendDocModal(false)}>Cancelar</button>
+        </div>
+      </Modal>
+
+      {/* Client Profile Modal */}
+      <Modal open={!!clientProfile} onClose={() => setClientProfile(null)} title={clientProfile?.nombre_completo || ''} size="md">
+        {clientProfile && (
+          <div className="client-profile">
+            <div className="info-grid">
+              <div className="info-item">
+                <span className="info-label">Email</span>
+                <span className="info-value">{clientProfile.email}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Cédula</span>
+                <span className="info-value">{clientProfile.cedula || '—'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Celular</span>
+                <span className="info-value">{clientProfile.celular || '—'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Dirección</span>
+                <span className="info-value">{clientProfile.direccion || '—'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Rol</span>
+                <span className="info-value">{clientProfile.rol}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Registro</span>
+                <span className="info-value">{new Date(clientProfile.created_at).toLocaleDateString('es-CO')}</span>
+              </div>
+            </div>
+            <h4>Expedientes del cliente ({clientExpedientes.length})</h4>
+            {clientExpedientes.length === 0 ? (
+              <p>No tiene expedientes.</p>
+            ) : (
+              <div className="table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr><th>Título</th><th>Estado</th><th>Fecha</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {clientExpedientes.map((e) => (
+                      <tr key={e.id}>
+                        <td>{e.titulo}</td>
+                        <td>{e.estado}</td>
+                        <td>{new Date(e.created_at).toLocaleDateString('es-CO')}</td>
+                        <td><button className="btn-icon" onClick={() => { setClientProfile(null); openExpedienteDetail({ ...e, profiles: clientProfile }); }}>Ver</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
