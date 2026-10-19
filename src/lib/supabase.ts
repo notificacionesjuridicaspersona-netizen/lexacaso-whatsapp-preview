@@ -1,12 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
+function limpiarUrl(valor: string | undefined): string {
+  const coincidencia = (valor || '').match(/https?:\/\/[a-z0-9-]+\.supabase\.co/i);
+  return coincidencia ? coincidencia[0] : 'https://placeholder.supabase.co';
+}
 
-export const supabase = createClient(
-  supabaseUrl.startsWith('http') ? supabaseUrl : 'https://placeholder.supabase.co',
-  supabaseAnonKey
-);
+function limpiarClave(valor: string | undefined): string {
+  return (valor || '').replace(/["'\s]/g, '');
+}
+
+const supabaseUrl = limpiarUrl(import.meta.env.VITE_SUPABASE_URL);
+const supabaseAnonKey = limpiarClave(import.meta.env.VITE_SUPABASE_ANON_KEY) || 'placeholder-key';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const STORAGE_BUCKET = 'expedientes';
 export const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.txt', '.png', '.jpg', '.jpeg', '.xls', '.xlsx', '.zip', '.rar'];
