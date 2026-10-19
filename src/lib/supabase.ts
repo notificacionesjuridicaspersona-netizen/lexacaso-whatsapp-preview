@@ -19,8 +19,10 @@ export const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.txt', '.png', '.jp
 export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 // Configuración del modelo activo de Gemini
+const modelFromEnv = import.meta.env.VITE_GEMINI_MODEL || import.meta.env.GEMINI_MODEL;
+
 export const GEMINI_CONFIG = {
-  model: 'gemini-flash-latest',
+  model: (modelFromEnv && modelFromEnv.trim().length > 0) ? modelFromEnv.trim() : 'gemini-3.8-flash',
   apiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
   apiKey: (import.meta.env.VITE_GEMINI_API_KEY as string) || '',
   generationConfig: {
