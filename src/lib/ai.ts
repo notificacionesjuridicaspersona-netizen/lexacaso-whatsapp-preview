@@ -9,8 +9,7 @@ export interface AIResult {
 // Modelo en un solo lugar. Puedes cambiarlo sin tocar el código
 // definiendo VITE_GEMINI_MODEL en las variables de entorno.
 const GEMINI_MODEL: string =
-  (import.meta.env.VITE_GEMINI_MODEL as string | undefined)?.trim() || 'gemini-2.0-flash';
-
+  (import.meta.env.VITE_GEMINI_MODEL as string | undefined)?.trim() || 'gemini-flash-latest';
 const LEGAL_SYSTEM_PROMPT = `
 Actúa como Abogado Estratégico Senior de Colombia con dominio sobre las 10 ramas del derecho:
 1. Civil y Familia (CGP, Código Civil, Ley 2220/22)
