@@ -5,10 +5,18 @@ export interface GeminiResponse {
   error?: string;
 }
 
+export function isAIConfigured(): boolean {
+  return typeof GEMINI_CONFIG.apiKey === 'string' && GEMINI_CONFIG.apiKey.trim().length > 0;
+}
+
+export function getAIProvider(): string {
+  return 'Google Gemini';
+}
+
 export async function callGemini(prompt: string): Promise<GeminiResponse> {
   try {
     const endpoint = getGeminiEndpoint();
-    
+
     if (!GEMINI_CONFIG.apiKey) {
       return {
         content: '',
@@ -55,4 +63,12 @@ export async function callGemini(prompt: string): Promise<GeminiResponse> {
       error: error instanceof Error ? error.message : 'Error desconocido al conectar con Gemini.',
     };
   }
+}
+
+export async function runAI(prompt: string): Promise<string> {
+  const result = await callGemini(prompt);
+  if (result.error) {
+    throw new Error(result.error);
+  }
+  return result.content;
 }
