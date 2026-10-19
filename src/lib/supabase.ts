@@ -18,15 +18,13 @@ export const STORAGE_BUCKET = 'expedientes';
 export const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.txt', '.png', '.jpg', '.jpeg', '.xls', '.xlsx', '.zip', '.rar'];
 export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
-// Identificador de modelo estable y explícito (se evita el uso de alias como 'gemini-flash-latest')
+// Identificador de modelo estable y explícito
 const rawModel = import.meta.env.VITE_GEMINI_MODEL || import.meta.env.GEMINI_MODEL || '';
 const cleanModel = rawModel.replace(/^models\//, '').trim();
 
-// Si la variable contiene un alias antiguo o no existe, fuerza 'gemini-1.5-flash'
-const esAliasObsoleto = !cleanModel || cleanModel.includes('latest') || cleanModel.includes('2.0') || cleanModel.includes('3.8');
-
+// Si no hay variable configurada, se fuerza el uso del modelo gemini-3.8-flash actual
 export const GEMINI_CONFIG = {
-  model: esAliasObsoleto ? 'gemini-1.5-flash' : cleanModel,
+  model: cleanModel || 'gemini-3.8-flash',
   apiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
   apiKey: (import.meta.env.VITE_GEMINI_API_KEY as string) || '',
   generationConfig: {
