@@ -30,9 +30,3 @@ export async function callGemini(prompt: string) {
     return { content: '', error: error instanceof Error ? error.message : 'Error al conectar con Gemini.' };
   }
 }
-
-export async function runAI(prompt: string): Promise<string> {
-  const result = await callGemini(prompt);
-  if (result.error) throw new Error(result.error);
-  return result.content;
-}
