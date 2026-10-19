@@ -1,42 +1,36 @@
-import { getGeminiEndpoint } from './supabase';
+import { createClient } from '@supabase/supabase-js';
 
-export const AUDITORIA_JURIDICA_SYSTEM_PROMPT = `
-Actúa como un auditor jurídico senior con escepticismo estricto y rigor técnico. 
-Prohibido usar adjetivos grandilocuentes como "letal" o "demolición".
-Debes estructurar el análisis obligatoriamente en 5 bloques:
-1. Diagnóstico de Vulnerabilidad (El talón de Aquiles)
-2. Las 5 Objeciones Mayores (Contraposición Hostil)
-3. Auditoría Normativa y Argumentativa
-4. Criterios de Verificación Obligatoria
-5. Estrategia Ganadora Optimizada
-`;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
 
-export async function analizarConGemini(prompt: string, contexto?: string): Promise<string> {
-  const endpoint = getGeminiEndpoint();
+export const supabase = createClient(
+  supabaseUrl.startsWith('http') ? supabaseUrl : 'https://placeholder.supabase.co',
+  supabaseAnonKey
+);
 
-  const body = {
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          { text: AUDITORIA_JURIDICA_SYSTEM_PROMPT },
-          { text: contexto ? `Contexto del caso:\n${contexto}\n\nConsulta:\n${prompt}` : prompt }
-        ]
-      }
-    ]
-  };
+export const STORAGE_BUCKET = 'expedientes';
+export const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.txt', '.png', '.jpg', '.jpeg', '.xls', '.xlsx', '.zip', '.rar'];
+export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
+// Configuración del modelo activo de Gemini
+export const GEMINI_CONFIG = {
+  model: 'gemini-flash-latest',
+  apiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+  apiKey: (import.meta.env.VITE_GEMINI_API_KEY as string) || '',
+  generationConfig: {
+    temperature: 0.4,
+    topK: 32,
+    topP: 0.95,
+    maxOutputTokens: 8192,
+  },
+};
 
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error?.message || `Error Gemini API (${response.status})`);
-  }
-
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No se obtuvo respuesta de la IA.';
+export function getGeminiEndpoint(): string {
+  return `${GEMINI_CONFIG.apiBaseUrl}/models/${GEMINI_CONFIG.model}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
 }
+
+export const PRIORIDADES = [
+  { id: 'alta', label: 'Alta', color: 'bg-red-100 text-red-800' },
+  { id: 'media', label: 'Media', color: 'bg-yellow-100 text-yellow-800' },
+  { id: 'baja', label: 'Baja', color: 'bg-green-100 text-green-800' }
+];
