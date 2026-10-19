@@ -24,7 +24,7 @@ const cleanModel = rawModel.replace(/^models\//, '').trim();
 
 // Si no hay variable configurada, se fuerza el uso del modelo gemini-3.8-flash actual
 export const GEMINI_CONFIG = {
-  model: cleanModel || 'gemini-3.8-flash',
+  model: 'gemini-3.8-flash',
   apiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
   apiKey: (import.meta.env.VITE_GEMINI_API_KEY as string) || '',
   generationConfig: {
