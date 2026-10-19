@@ -18,11 +18,14 @@ export const STORAGE_BUCKET = 'expedientes';
 export const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.txt', '.png', '.jpg', '.jpeg', '.xls', '.xlsx', '.zip', '.rar'];
 export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
-// Configuración dinámica del modelo de Gemini
-const modelFromEnv = import.meta.env.VITE_GEMINI_MODEL || import.meta.env.GEMINI_MODEL;
+// Forzar el modelo oficial activo de Google Gemini
+const rawModel = import.meta.env.VITE_GEMINI_MODEL || import.meta.env.GEMINI_MODEL || '';
+const cleanModel = rawModel.replace(/^models\//, '').trim();
 
 export const GEMINI_CONFIG = {
-  model: (modelFromEnv && modelFromEnv.trim().length > 0) ? modelFromEnv.trim() : 'gemini-3.8-flash',
+  model: (cleanModel && !cleanModel.includes('2.0-flash') && !cleanModel.includes('3.8')) 
+    ? cleanModel 
+    : 'gemini-1.5-flash',
   apiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
   apiKey: (import.meta.env.VITE_GEMINI_API_KEY as string) || '',
   generationConfig: {
