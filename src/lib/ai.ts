@@ -75,3 +75,4 @@ export async function runAI(prompt: string): Promise<string> {
   }
   return result.content;
 }
+// Actualización forzada para Vercel
