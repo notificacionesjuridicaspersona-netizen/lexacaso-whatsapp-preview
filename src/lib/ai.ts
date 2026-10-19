@@ -5,6 +5,7 @@ export interface GeminiResponse {
   error?: string;
 }
 
+// Exportaciones requeridas por AdminMantenimiento.tsx
 export function isAIConfigured(): boolean {
   return typeof GEMINI_CONFIG.apiKey === 'string' && GEMINI_CONFIG.apiKey.trim().length > 0;
 }
@@ -13,6 +14,7 @@ export function getAIProvider(): string {
   return 'Google Gemini';
 }
 
+// Función base para realizar peticiones a la API
 export async function callGemini(prompt: string): Promise<GeminiResponse> {
   try {
     const endpoint = getGeminiEndpoint();
@@ -65,6 +67,7 @@ export async function callGemini(prompt: string): Promise<GeminiResponse> {
   }
 }
 
+// Exportación requerida por HerramientasJuridicas.tsx y AnalisisIA.tsx
 export async function runAI(prompt: string): Promise<string> {
   const result = await callGemini(prompt);
   if (result.error) {
