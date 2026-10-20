@@ -15,7 +15,7 @@ export const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 export const GEMINI_CONFIG = {
   model: 'gemini-1.5-flash',
-  apiBaseUrl: 'https://googleapis.com',
+  apiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
   apiKey: (import.meta.env.VITE_GEMINI_API_KEY as string) || '',
   generationConfig: {
     temperature: 0.4,
