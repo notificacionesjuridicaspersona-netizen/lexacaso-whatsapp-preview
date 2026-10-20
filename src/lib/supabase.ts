@@ -1,7 +1,19 @@
-// Forzado del modelo estable sin depender de VITE_GEMINI_MODEL del archivo .env
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Faltan las variables de entorno de Supabase en la configuración.');
+}
+
+// Exportación principal de la base de datos requerida por AuthContext y los componentes
+export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+
+// Forzado del modelo estable de Inteligencia Artificial integrado de forma segura
 export const GEMINI_CONFIG = {
   model: 'gemini-1.5-flash',
-  apiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+  apiBaseUrl: 'https://googleapis.com',
   apiKey: (import.meta.env.VITE_GEMINI_API_KEY as string) || '',
   generationConfig: {
     temperature: 0.4,
