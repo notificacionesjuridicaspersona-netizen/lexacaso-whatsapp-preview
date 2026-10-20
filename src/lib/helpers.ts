@@ -31,4 +31,3 @@ export const GEMINI_CONFIG = {
 export function getGeminiEndpoint(): string {
   return `${GEMINI_CONFIG.apiBaseUrl}/models/${GEMINI_CONFIG.model}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
 }
-
