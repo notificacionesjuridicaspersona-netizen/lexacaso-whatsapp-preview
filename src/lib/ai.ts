@@ -1,4 +1,4 @@
-import { GEMINI_CONFIG, getGeminiEndpoint } from './supabase-temporales';
+import { GEMINI_CONFIG, getGeminiEndpoint } from './supabase-temporal';
 
 export interface GeminiResponse {
   content: string;
