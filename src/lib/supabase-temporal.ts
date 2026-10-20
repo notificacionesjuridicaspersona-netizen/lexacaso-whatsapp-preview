@@ -17,7 +17,7 @@ export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB en bytes
 
 // Forzado del modelo estable de Inteligencia Artificial integrado de forma segura
 export const GEMINI_CONFIG = {
-  model: 'gemini-1.5-flash',
+  model: 'gemini-3.8-flash',
   apiBaseUrl: 'https://googleapis.com',
   apiKey: (import.meta.env.VITE_GEMINI_API_KEY as string) || '',
   generationConfig: {
