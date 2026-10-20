@@ -10,6 +10,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // Exportación principal de la base de datos requerida por AuthContext y los componentes
 export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
 
+// Variables indispensables requeridas por src/lib/helpers.ts
+export const STORAGE_BUCKET = 'expedientes';
+export const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.tiff', '.zip'];
+export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB en bytes
+
 // Forzado del modelo estable de Inteligencia Artificial integrado de forma segura
 export const GEMINI_CONFIG = {
   model: 'gemini-1.5-flash',
