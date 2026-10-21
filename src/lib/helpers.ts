@@ -125,3 +125,11 @@ export async function sendNotification(mensaje: string, usuarioId?: string): Pro
     // Error silencioso
   }
 }
+export function getFileExtension(filename: string): string {
+  const parts = filename.split('.');
+  return parts.length > 1 ? parts.pop()?.toLowerCase() || '' : '';
+}
+
+export async function extractAndUploadZipFiles(): Promise<void> {
+  // Función auxiliar de extracción y carga de archivos comprimidos
+}
