@@ -133,3 +133,18 @@ export function getFileExtension(filename: string): string {
 export async function extractAndUploadZipFiles(): Promise<void> {
   // Función auxiliar de extracción y carga de archivos comprimidos
 }
+export async function exportDocumentosToZip(): Promise<void> {
+  // Función auxiliar para exportar documentos comprimidos
+}
+
+export async function previewZipContents(): Promise<void> {
+  // Función auxiliar para previsualizar contenido de archivos ZIP
+}
+export function searchExpedientes<T extends { titulo?: string; descripcion?: string }>(items: T[], query: string): T[] {
+  if (!query) return items;
+  const q = query.toLowerCase();
+  return items.filter(item => 
+    (item.titulo && item.titulo.toLowerCase().includes(q)) || 
+    (item.descripcion && item.descripcion.toLowerCase().includes(q))
+  );
+}
