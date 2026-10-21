@@ -148,3 +148,18 @@ export function searchExpedientes<T extends { titulo?: string; descripcion?: str
     (item.descripcion && item.descripcion.toLowerCase().includes(q))
   );
 }
+export async function exportExpedientesToXlsx(): Promise<void> {
+  // Función auxiliar para exportar a Excel
+}
+
+export async function exportExpedientesToCsv(): Promise<void> {
+  // Función auxiliar para exportar a CSV
+}
+
+export async function exportDocumentosToZip(): Promise<void> {
+  // Función auxiliar para exportar documentos a ZIP
+}
+
+export async function previewZipContents(): Promise<void> {
+  // Función auxiliar para previsualizar ZIP
+}
