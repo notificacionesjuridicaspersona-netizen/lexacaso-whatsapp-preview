@@ -28,3 +28,9 @@ export const GEMINI_CONFIG = {
 export function getGeminiEndpoint(): string {
   return `${GEMINI_CONFIG.apiBaseUrl}/models/${GEMINI_CONFIG.model}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
 }
+export const PRIORIDADES = [
+  { id: 'baja', label: 'Baja' },
+  { id: 'media', label: 'Media' },
+  { id: 'alta', label: 'Alta' },
+  { id: 'urgente', label: 'Urgente' },
+];
