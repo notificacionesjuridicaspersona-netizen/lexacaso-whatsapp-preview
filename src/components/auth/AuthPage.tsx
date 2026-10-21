@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../context/AuthContext';
 import { getAppSettings } from '../../lib/helpers';
 
 type Mode = 'login' | 'register' | 'recover';
 
 export default function AuthPage() {
-  const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -40,8 +38,11 @@ export default function AuthPage() {
 
     try {
       if (mode === 'login') {
-        const { error } = await signIn(email, password);
-        if (error) setError(error);
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (signInError) setError(signInError.message);
       } else if (mode === 'register') {
         if (!aceptaTerminos) {
           setError('Debe aceptar los Términos y Condiciones para continuar.');
@@ -53,26 +54,34 @@ export default function AuthPage() {
           setLoading(false);
           return;
         }
-        const { error } = await signUp(email, password, {
-          nombre_completo: nombreCompleto || email,
-          cedula,
-          celular,
-          direccion,
-          autorizacion_datos: true,
+
+        const { error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              nombre_completo: nombreCompleto || email,
+              cedula,
+              celular,
+              direccion,
+              autorizacion_datos: true,
+            },
+          },
         });
-        if (error) {
-          setError(error);
+
+        if (signUpError) {
+          setError(signUpError.message);
         } else {
-          setSuccess('Cuenta creada. Inicie sesión para continuar.');
+          setSuccess('Cuenta creada correctamente. Inicie sesión para continuar.');
           setMode('login');
           setPassword('');
         }
       } else if (mode === 'recover') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        const { error: recoverError } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: window.location.origin,
         });
-        if (error) {
-          setError(error.message);
+        if (recoverError) {
+          setError(recoverError.message);
         } else {
           setSuccess('Se ha enviado un enlace de recuperación a su correo.');
         }
