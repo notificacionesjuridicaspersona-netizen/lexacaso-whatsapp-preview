@@ -159,3 +159,6 @@ export async function exportDocumentosToZip(): Promise<void> {
 export async function previewZipContents(): Promise<void> {
   // Función auxiliar para previsualizar ZIP
 }
+export async function exportExpedienteToDocx(): Promise<void> {
+  // Función auxiliar para exportar expediente a Word (DOCX)
+}
