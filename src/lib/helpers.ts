@@ -168,3 +168,6 @@ export async function exportExpedienteToDocx(exportTarget?: any, options?: any):
 export async function exportExpedienteToDocx(exportTarget?: any, options?: any): Promise<void> {
   // Función auxiliar para exportar expediente a Word (DOCX)
 }
+export async function exportExpedienteToDocx(exportTarget?: any, options?: any): Promise<void> {
+  // Función auxiliar para exportar expediente a Word (DOCX)
+}
