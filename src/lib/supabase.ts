@@ -9,7 +9,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
 
-export const STORAGE_BUCKET = 'documents';
+export const STORAGE_BUCKET = 'Documents'; // O pon el nombre idéntico al que aparece en tu panel
 export const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.tiff', '.zip'];
 export const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
