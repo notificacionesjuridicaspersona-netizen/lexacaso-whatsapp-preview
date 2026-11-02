@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase, PRIORIDADES } from '../../lib/supabase';
+import { supabase, PRIORIDADES, STORAGE_BUCKET } from '../../lib/supabase';
 import type { Expediente, Documento, Profile, Observacion, Seguimiento, HistorialEntry, ConfigEstado, AnalisisJuridico } from '../../types';
 import Comentarios from '../shared/Comentarios';
 import HerramientasJuridicas from './HerramientasJuridicas';
@@ -499,7 +499,7 @@ export default function AdminExpedientes() {
     const random = Math.random().toString(36).substring(2, 8);
     const filePath = `${selectedExp.user_id}/${selectedExp.id}/${timestamp}-${random}.${ext}`;
 
-    const { error: uploadError } = await supabase.storage.from('documentos').upload(filePath, sendDocFile);
+    const { error: uploadError } = await supabase.storage.from(STORAGE_BUCKET).upload(filePath, sendDocFile);
     if (uploadError) {
       setError(uploadError.message);
       return;
@@ -519,7 +519,7 @@ export default function AdminExpedientes() {
     });
 
     if (dbError) {
-      await supabase.storage.from('documentos').remove([filePath]);
+      await supabase.storage.from(STORAGE_BUCKET).remove([filePath]);
       setError(dbError.message);
       return;
     }
