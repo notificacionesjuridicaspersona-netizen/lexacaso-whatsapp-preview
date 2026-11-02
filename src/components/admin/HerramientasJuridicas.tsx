@@ -19,21 +19,21 @@ interface ToolDef {
 }
 
 const TOOLS: ToolDef[] = [
-  { key: 'tool_analizar_documentos', label: 'Analizar documentos jurídicos', descripcion: 'Extraer y analizar el contenido de los documentos del expediente.', prompt: 'Analice los documentos jurídicos del expediente y describa su contenido, relevancia y valor probatorio.' },
-  { key: 'tool_resumir_hechos', label: 'Resumir hechos cronológicamente', descripcion: 'Organizar los hechos en orden cronológico.', prompt: 'Resuma los hechos del caso en orden cronológico, destacando los eventos más relevantes.' },
-  { key: 'tool_identificar_problemas', label: 'Identificar problemas jurídicos', descripcion: 'Determinar las cuestiones jurídicas centrales.', prompt: 'Identifique y enuncie los problemas jurídicos centrales del caso.' },
-  { key: 'tool_jurisprudencia', label: 'Investigar jurisprudencia', descripcion: 'Buscar sentencias y decisiones relevantes.', prompt: 'Investigue la jurisprudencia pertinente al caso. Indique tribunal, fecha, número de decisión y fuente verificable.' },
-  { key: 'tool_normatividad', label: 'Identificar normatividad aplicable', descripcion: 'Determinar normas, artículos y reglas.', prompt: 'Identifique la normatividad aplicable al caso, indicando artículo, norma, fuente oficial y vigencia.' },
-  { key: 'tool_alternativas', label: 'Evaluar alternativas de solución', descripcion: 'Comparar opciones y sus riesgos.', prompt: 'Evalúe las alternativas de solución del caso, con requisitos, ventajas, riesgos y pasos siguientes.' },
-  { key: 'tool_terminos_plazos', label: 'Identificar términos y plazos', descripcion: 'Detectar deadlines y prescripciones.', prompt: 'Identifique los términos y plazos relevantes del caso, incluyendo prescripciones y caducidades.' },
-  { key: 'tool_pruebas_faltantes', label: 'Detectar pruebas faltantes', descripcion: 'Identificar documentos y pruebas que faltan.', prompt: 'Detecte qué documentos, pruebas y elementos faltan para sustentar el caso.' },
-  { key: 'tool_estrategias', label: 'Proponer estrategias jurídicas', descripcion: 'Diseñar estrategias procesales.', prompt: 'Proponga estrategias jurídicas para el caso, diferenciando hechos acreditados de pendientes de verificación.' },
-  { key: 'tool_acciones', label: 'Determinar posibles acciones', descripcion: 'Identificar vías judiciales, administrativas o extrajudiciales.', prompt: 'Determine las posibles acciones judiciales, administrativas o extrajudiciales disponibles.' },
-  { key: 'tool_conducta', label: 'Indicar conducta a evaluar', descripcion: 'Recomendar la conducta procesal apropiada.', prompt: 'Indique la conducta o actuación que convendría evaluar en el caso.' },
-  { key: 'tool_borradores', label: 'Elaborar borradores', descripcion: 'Generar borradores de documentos jurídicos.', prompt: 'Elabore un borrador de documento jurídico pertinente. Señale los datos faltantes que no se pueden inventar.' },
-  { key: 'tool_contradicciones', label: 'Revisar contradicciones', descripcion: 'Detectar vacíos y debilidades probatorias.', prompt: 'Revise contradicciones, vacíos, debilidades probatorias y riesgos del caso.' },
-  { key: 'tool_informe_integral', label: 'Informe jurídico integral', descripcion: 'Consolidar todo el análisis.', prompt: 'Genere un informe jurídico integral que reúna hechos, documentos, problemas, normas, jurisprudencia, estrategias y plazos.' },
-  { key: 'tool_segunda_revision', label: 'Segunda revisión crítica', descripcion: 'Revisar el análisis anterior.', prompt: 'Realice una segunda revisión crítica del análisis anterior, buscando errores de razonamiento, contradicciones y omisiones.' },
+  { key: 'tool_analizar_documentos', label: 'Análisis forense de documentos', descripcion: 'Análisis forense exhaustivo: vicios, irregularidades, valor probatorio y debilidades.', prompt: 'Realice un análisis forense exhaustivo de cada documento del expediente. Para cada uno: (1) Identifique vicios de procedimiento, irregularidades formales o sustanciales y defectos que constituyan causales de controversia o nulidad. (2) Evalúe el valor probatorio, autenticidad y pertinencia. (3) Detecte debilidades probatorias o argumentativas utilizables contra la contraparte. (4) Indique si el documento cumple con los requisitos legales de forma y fondo.' },
+  { key: 'tool_resumir_hechos', label: 'Cronología y reconstrucción fáctica', descripcion: 'Reconstrucción cronológica con análisis de cada hecho.', prompt: 'Reconstruya cronológicamente los hechos del caso. Para cada hecho, indique: fecha, fuente probatoria, nivel de acreditación (demostrado/presumido/por demostrar) y su relevancia procesal. Identifique vacíos en la cadena fáctica.' },
+  { key: 'tool_identificar_problemas', label: 'Identificar problemas jurídicos centrales', descripcion: 'Cuestiones jurídicas centrales y controversias.', prompt: 'Identifique y enuncie los problemas jurídicos centrales del caso. Para cada problema: (1) Plantee la controversia jurídica. (2) Indique las posiciones posibles de la contraparte. (3) Cite las normas y principios en conflicto. (4) Evalúe la solidez de cada posición.' },
+  { key: 'tool_jurisprudencia', label: 'Investigar jurisprudencia aplicable', descripcion: 'Sentencias y líneas jurisprudenciales relevantes.', prompt: 'Investigue la jurisprudencia pertinente al caso. Indique tribunal, fecha, número de decisión, ratio decidendi y cómo se aplica al caso concreto. Diferencie jurisprudencia vinculante de persuasiva.' },
+  { key: 'tool_normatividad', label: 'Normatividad aplicable', descripcion: 'Normas, artículos y reglas vigentes.', prompt: 'Identifique toda la normatividad aplicable al caso. Para cada norma: artículo, número, fuente oficial, vigencia y cómo se aplica a los hechos. Incluya normas sustanciales y procesales.' },
+  { key: 'tool_alternativas', label: 'Evaluar alternativas de solución', descripcion: 'Comparar opciones procesales y sus riesgos.', prompt: 'Evalúe las alternativas de solución del caso. Para cada alternativa: requisitos, ventajas, riesgos, probabilidad de éxito, costos y plazos. Recomiende la mejor opción fundamentadamente.' },
+  { key: 'tool_terminos_plazos', label: 'Términos, plazos y prescripciones', descripcion: 'Deadlines, caducidades y prescripciones.', prompt: 'Identifique todos los términos y plazos relevantes del caso: prescripciones, caducidades, términos procesales para recursos, pruebas y audiencias. Indique si alguno está próximo a vencer y la consecuencia de su omisión.' },
+  { key: 'tool_pruebas_faltantes', label: 'Detectar pruebas faltantes', descripcion: 'Documentos y pruebas necesarias.', prompt: 'Detecte qué documentos, pruebas y elementos faltan para sustentar el caso. Clasifíquelos por prioridad (urgente/importante/conveniente) e indique cómo obtenerlos.' },
+  { key: 'tool_estrategias', label: 'Estrategias jurídicas de defensa/ataque', descripcion: 'Estrategias procesales altamente técnicas.', prompt: 'Estructure estrategias jurídicas de defensa o ataque procesal altamente técnicas. Diferencie hechos acreditados de pendientes de verificación. Para cada estrategia: fundamento normativo, jurisprudencial, pasos de ejecución y riesgos.' },
+  { key: 'tool_acciones', label: 'Determinar posibles acciones', descripcion: 'Vías judiciales, administrativas o extrajudiciales.', prompt: 'Determine las posibles acciones judiciales, administrativas o extrajudiciales disponibles. Para cada acción: requisitos de procedibilidad, competencia, término y probabilidad de éxito.' },
+  { key: 'tool_conducta', label: 'Conducta procesal recomendada', descripcion: 'Recomendar la conducta procesal apropiada.', prompt: 'Indique la conducta o actuación procesal que convendría evaluar en el caso. Fundamente la recomendación en el análisis forense previo.' },
+  { key: 'tool_borradores', label: 'Elaborar borradores jurídicos', descripcion: 'Borradores de escritos y recursos.', prompt: 'Elabore un borrador de documento jurídico pertinente al caso (demanda, recurso, contestación, etc.). Señale expresamente los datos faltantes que no se pueden inventar. Estructúrelo con encabezado, hechos, fundamentos de derecho, pretensiones y solicitudes.' },
+  { key: 'tool_contradicciones', label: 'Revisar contradicciones y debilidades', descripcion: 'Vacios, contradicciones y debilidades probatorias.', prompt: 'Revise contradicciones, vacíos y debilidades probatorias del caso. Identifique: (1) contradicciones internas en los hechos o pruebas. (2) debilidades argumentativas explotables por la contraparte. (3) riesgos procesales. (4) recomendaciones para neutralizar cada debilidad.' },
+  { key: 'tool_informe_integral', label: 'Informe jurídico integral forense', descripcion: 'Consolidación completa del análisis forense.', prompt: 'Genere un informe jurídico integral forense que reúna: análisis de documentos, cronología, problemas jurídicos, normatividad, jurisprudencia, estrategias de defensa/ataque, términos y plazos, y un plan de acción claro y preciso sobre la ruta jurídica a seguir.' },
+  { key: 'tool_segunda_revision', label: 'Segunda revisión crítica', descripcion: 'Revisión crítica del análisis anterior.', prompt: 'Realice una segunda revisión crítica del análisis anterior, buscando errores de razonamiento, contradicciones, omisiones y puntos débiles. Proponga correcciones y refuerzos argumentales.' },
 ];
 
 export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, onAnalisisChanged }: HerramientasJuridicasProps) {
@@ -87,17 +87,13 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
     try {
       const context = await loadDocumentContext();
 
-      const result = await runAI(tool.prompt, context);
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
+      const content = await runAI(tool.prompt, context);
 
       const { error: insertError } = await supabase.from('analisis_juridicos').insert({
         expediente_id: expedienteId,
         tipo: 'ia',
         titulo: tool.label,
-        contenido: result.content,
+        contenido: content,
       });
       if (insertError) throw new Error(insertError.message);
       await logAuditoria('ejecutar_herramienta_ia', `Herramienta: ${tool.label} en expediente: ${expedienteTitulo}`, 'analisis', null);

@@ -1,4 +1,4 @@
-import { supabase, STORAGE_BUCKET } from './supabase';
+import { supabase, STORAGE_BUCKET, ensureBucket } from './supabase';
 import { extraerTextoDeArchivo } from './helpers';
 import JSZip from 'jszip';
 import type { Documento } from '../types';
@@ -18,6 +18,8 @@ export async function extractExpedienteDocumentText(expedienteId: string): Promi
   documentos: ExtractedDoc[];
   resumen: string;
 }> {
+  await ensureBucket();
+
   const { data: docs } = await supabase
     .from('documentos')
     .select('*')

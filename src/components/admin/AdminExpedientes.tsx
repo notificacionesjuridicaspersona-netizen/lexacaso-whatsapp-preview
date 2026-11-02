@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase, PRIORIDADES, STORAGE_BUCKET } from '../../lib/supabase';
+import { supabase, PRIORIDADES, STORAGE_BUCKET, ensureBucket } from '../../lib/supabase';
 import type { Expediente, Documento, Profile, Observacion, Seguimiento, HistorialEntry, ConfigEstado, AnalisisJuridico } from '../../types';
 import Comentarios from '../shared/Comentarios';
 import HerramientasJuridicas from './HerramientasJuridicas';
@@ -488,6 +488,7 @@ export default function AdminExpedientes() {
 
   const handleSendDocument = async () => {
     if (!sendDocFile || !selectedExp) return;
+    await ensureBucket();
     const validation = validateFile(sendDocFile);
     if (!validation.valid) {
       setError(validation.error || 'Error de validación');

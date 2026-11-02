@@ -9,7 +9,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
 
-export const STORAGE_BUCKET = 'Documents'; // O pon el nombre idéntico al que aparece en tu panel
+export const STORAGE_BUCKET = 'expedientes';
 export const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.tiff', '.zip'];
 export const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
@@ -34,3 +34,20 @@ export const PRIORIDADES = [
   { id: 'alta', label: 'Alta' },
   { id: 'urgente', label: 'Urgente' },
 ];
+
+let bucketVerified = false;
+
+export async function ensureBucket(): Promise<boolean> {
+  if (bucketVerified) return true;
+  try {
+    const { data, error } = await supabase.storage.getBucket(STORAGE_BUCKET);
+    if (error || !data) {
+      const { error: createError } = await supabase.storage.createBucket(STORAGE_BUCKET, { public: false });
+      if (createError) return false;
+    }
+    bucketVerified = true;
+    return true;
+  } catch {
+    return false;
+  }
+}

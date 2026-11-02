@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { downloadDocument, deleteDocument, formatBytes } from '../../lib/helpers';
-import type { Expediente, Documento, Seguimiento, Observacion, AnalisisJuridico } from '../../types';
+import { downloadDocument, formatBytes } from '../../lib/helpers';
+import type { Expediente, Documento, Seguimiento, Observacion } from '../../types';
 import Comentarios from '../shared/Comentarios';
 import Modal from '../ui/Modal';
 
@@ -14,23 +14,20 @@ export default function ClientCaseTracking({ expediente, onClose }: ClientCaseTr
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [seguimientos, setSeguimientos] = useState<Seguimiento[]>([]);
   const [observaciones, setObservaciones] = useState<Observacion[]>([]);
-  const [analisis, setAnalisis] = useState<AnalisisJuridico[]>([]);
-  const [tab, setTab] = useState<'info' | 'documentos' | 'seguimientos' | 'observaciones' | 'comentarios' | 'analisis'>('info');
+  const [tab, setTab] = useState<'info' | 'documentos' | 'seguimientos' | 'observaciones' | 'comentarios'>('info');
   const [loading, setLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!expediente) return;
     setLoading(true);
-    const [docRes, segRes, obsRes, anaRes] = await Promise.all([
+    const [docRes, segRes, obsRes] = await Promise.all([
       supabase.from('documentos').select('*').eq('expediente_id', expediente.id).eq('visible_cliente', true).order('created_at', { ascending: false }),
       supabase.from('seguimientos').select('*').eq('expediente_id', expediente.id).order('fecha_actuacion', { ascending: false }),
       supabase.from('observaciones').select('*').eq('expediente_id', expediente.id).eq('visible_cliente', true).order('created_at', { ascending: false }),
-      supabase.from('analisis_juridicos').select('*').eq('expediente_id', expediente.id).order('creado_en', { ascending: false }),
     ]);
     if (docRes.data) setDocumentos(docRes.data as Documento[]);
     if (segRes.data) setSeguimientos(segRes.data as Seguimiento[]);
     if (obsRes.data) setObservaciones(obsRes.data as Observacion[]);
-    if (anaRes.data) setAnalisis(anaRes.data as AnalisisJuridico[]);
     setLoading(false);
   }, [expediente]);
 
@@ -55,7 +52,6 @@ export default function ClientCaseTracking({ expediente, onClose }: ClientCaseTr
             <button className={tab === 'seguimientos' ? 'active' : ''} onClick={() => setTab('seguimientos')}>Actuaciones ({seguimientos.length})</button>
             <button className={tab === 'observaciones' ? 'active' : ''} onClick={() => setTab('observaciones')}>Observaciones ({observaciones.length})</button>
             <button className={tab === 'comentarios' ? 'active' : ''} onClick={() => setTab('comentarios')}>Comentarios</button>
-            <button className={tab === 'analisis' ? 'active' : ''} onClick={() => setTab('analisis')}>Análisis ({analisis.length})</button>
           </div>
 
           {loading ? (
@@ -117,13 +113,6 @@ export default function ClientCaseTracking({ expediente, onClose }: ClientCaseTr
                         </div>
                         <div className="doc-actions">
                           <button className="btn btn-secondary btn-sm" onClick={() => handleDownload(doc)}>Descargar</button>
-                          <button className="btn-icon btn-danger" title="Eliminar documento" onClick={async () => {
-                            if (!confirm(`¿Eliminar el documento "${doc.nombre}"? Esta acción no se puede deshacer.`)) return;
-                            const result = await deleteDocument(doc);
-                            if (result.success) {
-                              setDocumentos(documentos.filter((d) => d.id !== doc.id));
-                            }
-                          }}>Eliminar</button>
                         </div>
                       </div>
                     ))}
@@ -177,27 +166,6 @@ export default function ClientCaseTracking({ expediente, onClose }: ClientCaseTr
                 <Comentarios expedienteId={expediente.id} isAdmin={false} />
               )}
 
-              {tab === 'analisis' && (
-                analisis.length === 0 ? (
-                  <div className="empty-state"><p>No hay análisis jurídicos disponibles.</p></div>
-                ) : (
-                  <div className="analisis-list">
-                    {analisis.map((a) => (
-                      <div key={a.id} className="analisis-item">
-                        <div className="analisis-header">
-                          <strong>{a.titulo}</strong>
-                          <span className={`badge ${a.tipo === 'ia' ? 'badge-gold' : a.tipo === 'jurisprudencia' ? 'badge-blue' : 'badge-green'}`}>{a.tipo}</span>
-                        </div>
-                        <p className="analisis-content">{a.contenido}</p>
-                        {a.resumen && <p className="analisis-resumen"><strong>Resumen:</strong> {a.resumen}</p>}
-                        <div className="analisis-meta">
-                          <span>{new Date(a.creado_en).toLocaleDateString('es-CO')}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )
-              )}
             </>
           )}
         </div>

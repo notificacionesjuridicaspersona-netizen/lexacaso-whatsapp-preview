@@ -13,7 +13,28 @@ export function getAIProvider(): string {
   return 'Google Gemini';
 }
 
-export async function callGemini(prompt: string): Promise<GeminiResponse> {
+const SYSTEM_PROMPT = `Eres un Abogado Experto Senior en litigios y derecho procesal, con dominio en todas las ramas del derecho (civil, penal, laboral, administrativo, constitucional, comercial, familia, etc.).
+
+Tu análisis no debe limitarse a un simple resumen descriptivo. Debes realizar primero un análisis forense exhaustivo del documento o caso, estructurado así:
+
+1. ANÁLISIS FORENSE DEL DOCUMENTO
+   - Identifica vicios de procedimiento, irregularidades formales o sustanciales y defectos que constituyan causales de controversia o nulidad.
+   - Detecta debilidades probatorias o argumentativas en la contraparte.
+   - Evalúa la competencia, jurisdiction, notificaciones, términos y plazos procesales.
+
+2. IDENTIFICACIÓN DE VÍAS JURÍDICAS
+   - Estructura estrategias jurídicas de defensa o ataque procesal altamente técnicas.
+   - Fundamenta cada estrategia en normas, jurisprudencia y doctrina aplicable.
+   - Diferencia hechos acreditados de hechos pendientes de verificación.
+
+3. PLAN DE ACCIÓN
+   - Genera un plan de acción claro y preciso sobre la ruta jurídica a seguir.
+   - Indica pasos concretos, documentos a gestionar, términos a cumplir y recursos a interponer.
+   - Prioriza las acciones según urgencia procesal.
+
+Responde siempre en español, con rigor técnico jurídico, citando normas y artículos cuando corresponda. Si falta información, indícalo expresamente y no la inventes.`;
+
+export async function callGemini(prompt: string, context?: string): Promise<GeminiResponse> {
   try {
     const endpoint = getGeminiEndpoint();
 
@@ -23,6 +44,10 @@ export async function callGemini(prompt: string): Promise<GeminiResponse> {
         error: 'La clave de API de Gemini (VITE_GEMINI_API_KEY) no está configurada.'
       };
     }
+
+    const fullPrompt = context
+      ? `${SYSTEM_PROMPT}\n\n--- CONTEXTO DEL EXPEDIENTE ---\n${context}\n\n--- CONSULTA ---\n${prompt}`
+      : `${SYSTEM_PROMPT}\n\n--- CONSULTA ---\n${prompt}`;
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -34,7 +59,7 @@ export async function callGemini(prompt: string): Promise<GeminiResponse> {
           {
             parts: [
               {
-                text: prompt,
+                text: fullPrompt,
               },
             ],
           },
@@ -65,8 +90,8 @@ export async function callGemini(prompt: string): Promise<GeminiResponse> {
   }
 }
 
-export async function runAI(prompt: string): Promise<string> {
-  const result = await callGemini(prompt);
+export async function runAI(prompt: string, context?: string): Promise<string> {
+  const result = await callGemini(prompt, context);
   if (result.error) {
     throw new Error(result.error);
   }

@@ -283,6 +283,18 @@ body {
   color: #fff;
   border-left-color: var(--color-accent);
 }
+.app-sidebar .nav-back-home {
+  margin-top: auto;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  border-left: 3px solid transparent;
+  color: rgba(255,255,255,0.6);
+  font-size: 0.85rem;
+}
+.app-sidebar .nav-back-home:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.05);
+  border-left-color: var(--color-accent);
+}
 .app-content {
   flex: 1; padding: 24px; overflow-x: auto;
   max-width: calc(100vw - 220px);

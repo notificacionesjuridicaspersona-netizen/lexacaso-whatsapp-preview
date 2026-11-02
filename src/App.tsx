@@ -77,6 +77,7 @@ export default function App() {
             </a>
           )}
           <button className="btn btn-secondary btn-sm" onClick={signOut}>Cerrar sesión</button>
+          <button className="btn btn-primary btn-sm" onClick={signOut} title="Volver a la página de inicio">Regresar al inicio</button>
         </div>
       </header>
 
@@ -90,12 +91,14 @@ export default function App() {
               <button className={adminTab === 'config' ? 'active' : ''} onClick={() => setAdminTab('config')}>Configuración</button>
               <button className={adminTab === 'mantenimiento' ? 'active' : ''} onClick={() => setAdminTab('mantenimiento')}>Mantenimiento</button>
               <button className={adminTab === 'bitacora' ? 'active' : ''} onClick={() => setAdminTab('bitacora')}>Auditoría</button>
+              <button className="nav-back-home" onClick={signOut}>Regresar al inicio</button>
             </>
           ) : (
             <>
               <button className={clientTab === 'dashboard' ? 'active' : ''} onClick={() => { setClientTab('dashboard'); setShowExponer(false); }}>Mis Expedientes</button>
               <button className={clientTab === 'documentos' ? 'active' : ''} onClick={() => setClientTab('documentos')}>Documentos Recibidos</button>
               <button className={clientTab === 'perfil' ? 'active' : ''} onClick={() => setClientTab('perfil')}>Mi Perfil</button>
+              <button className="nav-back-home" onClick={signOut}>Regresar al inicio</button>
             </>
           )}
         </nav>
