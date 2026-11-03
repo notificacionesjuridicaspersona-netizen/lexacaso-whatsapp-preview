@@ -5,6 +5,16 @@ export interface GeminiResponse {
   error?: string;
 }
 
+interface GeminiModel {
+  name?: string;
+  baseModelId?: string;
+  supportedGenerationMethods?: string[];
+}
+
+interface GeminiModelsResponse {
+  models?: GeminiModel[];
+}
+
 export function isAIConfigured(): boolean {
   return typeof GEMINI_CONFIG.apiKey === 'string' && GEMINI_CONFIG.apiKey.trim().length > 0;
 }
@@ -34,14 +44,42 @@ Indica una ruta jurídica precisa, paso a paso, con documentos necesarios, actua
 
 No inventes hechos, normas, sentencias, fechas ni fuentes. Cuando falte información, escribe “pendiente de verificación”.`;
 
+async function getAvailableGenerationModel(): Promise<string | null> {
+  const response = await fetch(`${GEMINI_CONFIG.apiBaseUrl}/models?key=${GEMINI_CONFIG.apiKey}`);
+  if (!response.ok) return null;
+
+  const data = await response.json() as GeminiModelsResponse;
+  const models = (data.models || []).filter((model) => model.supportedGenerationMethods?.includes('generateContent'));
+  const preferredIds = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3-flash-preview'];
+
+  for (const preferredId of preferredIds) {
+    const match = models.find((model) => model.baseModelId === preferredId || model.name === `models/${preferredId}`);
+    if (match?.name) return match.name.replace(/^models\//, '');
+  }
+
+  const firstModel = models.find((model) => model.name?.startsWith('models/gemini-'));
+  return firstModel?.name?.replace(/^models\//, '') || null;
+}
+
+async function requestGemini(model: string, fullPrompt: string): Promise<Response> {
+  return fetch(getGeminiEndpoint(model), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: fullPrompt }] }],
+      generationConfig: GEMINI_CONFIG.generationConfig,
+    }),
+  });
+}
+
 export async function callGemini(prompt: string, context?: string): Promise<GeminiResponse> {
   try {
-    const endpoint = getGeminiEndpoint();
-
     if (!GEMINI_CONFIG.apiKey) {
       return {
         content: '',
-        error: 'La clave de API de Gemini (VITE_GEMINI_API_KEY) no está configurada.'
+        error: 'La clave de API de Gemini no está configurada.',
       };
     }
 
@@ -49,39 +87,33 @@ export async function callGemini(prompt: string, context?: string): Promise<Gemi
       ? `${SYSTEM_PROMPT}\n\n--- CONTEXTO DEL EXPEDIENTE ---\n${context}\n\n--- CONSULTA ---\n${prompt}`
       : `${SYSTEM_PROMPT}\n\n--- CONSULTA ---\n${prompt}`;
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: fullPrompt,
-              },
-            ],
-          },
-        ],
-        generationConfig: GEMINI_CONFIG.generationConfig,
-      }),
-    });
+    let model = GEMINI_CONFIG.model;
+    let response = await requestGemini(model, fullPrompt);
+
+    if (response.status === 404) {
+      const availableModel = await getAvailableGenerationModel();
+      if (availableModel && availableModel !== model) {
+        model = availableModel;
+        response = await requestGemini(model, fullPrompt);
+      }
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       return {
         content: '',
-        error: `Gemini API Error (${response.status}): ${JSON.stringify(errorData)}`
+        error: `Gemini no pudo procesar el análisis (${response.status}). Verifique que la clave tenga un modelo compatible habilitado. ${JSON.stringify(errorData)}`,
       };
     }
 
-    const data = await response.json();
+    const data = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
     const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-    return {
-      content: candidateText,
-    };
+    if (!candidateText) {
+      return { content: '', error: 'Gemini devolvió una respuesta vacía.' };
+    }
+
+    return { content: candidateText };
   } catch (error) {
     return {
       content: '',
@@ -92,8 +124,6 @@ export async function callGemini(prompt: string, context?: string): Promise<Gemi
 
 export async function runAI(prompt: string, context?: string): Promise<string> {
   const result = await callGemini(prompt, context);
-  if (result.error) {
-    throw new Error(result.error);
-  }
+  if (result.error) throw new Error(result.error);
   return result.content;
 }

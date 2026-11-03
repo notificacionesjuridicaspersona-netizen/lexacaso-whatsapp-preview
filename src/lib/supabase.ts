@@ -14,7 +14,7 @@ export const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.p
 export const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 export const GEMINI_CONFIG = {
-  model: 'gemini-1.5-flash',
+  model: 'gemini-2.5-flash',
   apiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
   apiKey: (import.meta.env.VITE_GEMINI_API_KEY as string) || '',
   generationConfig: {
@@ -25,8 +25,8 @@ export const GEMINI_CONFIG = {
   },
 };
 
-export function getGeminiEndpoint(): string {
-  return `${GEMINI_CONFIG.apiBaseUrl}/models/${GEMINI_CONFIG.model}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
+export function getGeminiEndpoint(model = GEMINI_CONFIG.model): string {
+  return `${GEMINI_CONFIG.apiBaseUrl}/models/${model}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
 }
 export const PRIORIDADES = [
   { id: 'baja', label: 'Baja' },
@@ -35,19 +35,6 @@ export const PRIORIDADES = [
   { id: 'urgente', label: 'Urgente' },
 ];
 
-let bucketVerified = false;
-
 export async function ensureBucket(): Promise<boolean> {
-  if (bucketVerified) return true;
-  try {
-    const { data, error } = await supabase.storage.getBucket(STORAGE_BUCKET);
-    if (error || !data) {
-      const { error: createError } = await supabase.storage.createBucket(STORAGE_BUCKET, { public: false });
-      if (createError) return false;
-    }
-    bucketVerified = true;
-    return true;
-  } catch {
-    return false;
-  }
+  return true;
 }
