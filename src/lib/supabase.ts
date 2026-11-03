@@ -14,7 +14,7 @@ export const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.p
 export const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 export const GEMINI_CONFIG = {
-  model: 'gemini-2.5-flash',
+  model: 'gemini-3.8-flash',
   apiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
   apiKey: (import.meta.env.VITE_GEMINI_API_KEY as string) || '',
   generationConfig: {

@@ -50,7 +50,7 @@ async function getAvailableGenerationModel(): Promise<string | null> {
 
   const data = await response.json() as GeminiModelsResponse;
   const models = (data.models || []).filter((model) => model.supportedGenerationMethods?.includes('generateContent'));
-  const preferredIds = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3-flash-preview'];
+  const preferredIds = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
 
   for (const preferredId of preferredIds) {
     const match = models.find((model) => model.baseModelId === preferredId || model.name === `models/${preferredId}`);
