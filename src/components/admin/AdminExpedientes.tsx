@@ -191,7 +191,7 @@ export default function AdminExpedientes() {
     try {
       const [docRes, obsRes, segRes, histRes, anaRes] = await Promise.all([
         supabase.from('documentos').select('*').eq('expediente_id', exp.id).order('created_at', { ascending: false }),
-        supabase.from('observaciones').select('*, autor:profiles!observaciones_autor_id_fkey(*)').eq('expediente_id', exp.id).order('created_at', { ascending: false }),
+        supabase.from('observaciones').select('*, autor:profiles!observaciones_autor_id_profiles_fkey(*)').eq('expediente_id', exp.id).order('created_at', { ascending: false }),
         supabase.from('seguimientos').select('*').eq('expediente_id', exp.id).order('fecha_actuacion', { ascending: false }),
         supabase.from('historial_expedientes').select('*').eq('expediente_id', exp.id).order('created_at', { ascending: false }),
         supabase.from('analisis_juridicos').select('*').eq('expediente_id', exp.id).order('creado_en', { ascending: false }),
@@ -459,7 +459,7 @@ export default function AdminExpedientes() {
     }
     setNewObservacion('');
     setObsVisible(false);
-    const { data } = await supabase.from('observaciones').select('*, autor:profiles!observaciones_autor_id_fkey(*)').eq('expediente_id', selectedExp.id).order('created_at', { ascending: false });
+    const { data } = await supabase.from('observaciones').select('*, autor:profiles!observaciones_autor_id_profiles_fkey(*)').eq('expediente_id', selectedExp.id).order('created_at', { ascending: false });
     if (data) setExpObservaciones(data as Observacion[]);
   };
 

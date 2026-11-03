@@ -34,96 +34,8 @@ export async function extractExpedienteDocumentText(expedienteId: string): Promi
   const resultados: ExtractedDoc[] = [];
 
   for (const doc of docs as Documento[]) {
-    const ext = (doc.extension || '').toLowerCase();
-    try {
-      const { data: signedUrlData, error: urlError } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .createSignedUrl(doc.ruta_storage, 120);
-
-      if (urlError || !signedUrlData?.signedUrl) {
-        resultados.push({
-          nombre: doc.nombre,
-          extension: ext,
-          contenido: '[No se pudo acceder al archivo]',
-          metodo: 'error',
-        });
-        continue;
-      }
-
-      const response = await fetch(signedUrlData.signedUrl);
-      if (!response.ok) {
-        resultados.push({
-          nombre: doc.nombre,
-          extension: ext,
-          contenido: `[Error al descargar: ${response.status}]`,
-          metodo: 'error',
-        });
-        continue;
-      }
-
-      if (TEXT_EXTENSIONS.includes(ext)) {
-        const text = await response.text();
-        const truncated = text.substring(0, MAX_DOC_CHARS);
-        resultados.push({
-          nombre: doc.nombre,
-          extension: ext,
-          contenido: truncated,
-          metodo: 'directo',
-        });
-      } else if (ext === 'pdf') {
-        const blob = await response.blob();
-        const text = await extractPdfText(blob);
-        if (text) {
-          resultados.push({
-            nombre: doc.nombre,
-            extension: ext,
-            contenido: text.substring(0, MAX_DOC_CHARS),
-            metodo: 'pdf',
-          });
-        } else {
-          const file = new File([blob], doc.nombre, { type: 'application/pdf' });
-          const ocrText = await extraerTextoDeArchivo(file);
-          resultados.push({
-            nombre: doc.nombre,
-            extension: ext,
-            contenido: ocrText.substring(0, MAX_DOC_CHARS) || '[No se pudo extraer texto del documento PDF.]',
-            metodo: ocrText ? 'directo' : 'ocr-pendiente',
-          });
-        }
-      } else if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) {
-        const blob = await response.blob();
-        const file = new File([blob], doc.nombre, { type: doc.tipo_mime || 'image/jpeg' });
-        const ocrText = await extraerTextoDeArchivo(file);
-        resultados.push({
-          nombre: doc.nombre,
-          extension: ext,
-          contenido: ocrText.substring(0, MAX_DOC_CHARS) || '[No se pudo extraer texto de la imagen.]',
-          metodo: ocrText ? 'directo' : 'ocr-pendiente',
-        });
-      } else if (['doc', 'docx', 'xls', 'xlsx'].includes(ext)) {
-        const text = await extractOfficeText(await response.blob(), ext);
-        resultados.push({
-          nombre: doc.nombre,
-          extension: ext,
-          contenido: text.substring(0, MAX_DOC_CHARS),
-          metodo: text ? 'directo' : 'binario',
-        });
-      } else {
-        resultados.push({
-          nombre: doc.nombre,
-          extension: ext,
-          contenido: `[Formato ${ext} no procesable automáticamente. Documento disponible para descarga.]`,
-          metodo: 'binario',
-        });
-      }
-    } catch {
-      resultados.push({
-        nombre: doc.nombre,
-        extension: ext,
-        contenido: '[Error al procesar el archivo]',
-        metodo: 'error',
-      });
-    }
+    const resultado = await extractSingleDocument(doc);
+    resultados.push(resultado);
   }
 
   const partes = resultados.map((r) => {
@@ -137,6 +49,106 @@ export async function extractExpedienteDocumentText(expedienteId: string): Promi
     documentos: resultados,
     resumen: partes.join('\n\n'),
   };
+}
+
+export async function extractSingleDocument(doc: Documento): Promise<ExtractedDoc> {
+  await ensureBucket();
+  const ext = (doc.extension || '').toLowerCase();
+  try {
+    const { data: signedUrlData, error: urlError } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .createSignedUrl(doc.ruta_storage, 120);
+
+    if (urlError || !signedUrlData?.signedUrl) {
+      return {
+        nombre: doc.nombre,
+        extension: ext,
+        contenido: '[No se pudo acceder al archivo]',
+        metodo: 'error',
+      };
+    }
+
+    const response = await fetch(signedUrlData.signedUrl);
+    if (!response.ok) {
+      return {
+        nombre: doc.nombre,
+        extension: ext,
+        contenido: `[Error al descargar: ${response.status}]`,
+        metodo: 'error',
+      };
+    }
+
+    if (TEXT_EXTENSIONS.includes(ext)) {
+      const text = await response.text();
+      return {
+        nombre: doc.nombre,
+        extension: ext,
+        contenido: text.substring(0, MAX_DOC_CHARS),
+        metodo: 'directo',
+      };
+    } else if (ext === 'pdf') {
+      const blob = await response.blob();
+      const text = await extractPdfText(blob);
+      if (text) {
+        return {
+          nombre: doc.nombre,
+          extension: ext,
+          contenido: text.substring(0, MAX_DOC_CHARS),
+          metodo: 'pdf',
+        };
+      } else {
+        const file = new File([blob], doc.nombre, { type: 'application/pdf' });
+        const ocrText = await extraerTextoDeArchivo(file);
+        return {
+          nombre: doc.nombre,
+          extension: ext,
+          contenido: ocrText.substring(0, MAX_DOC_CHARS) || '[No se pudo extraer texto del documento PDF.]',
+          metodo: ocrText ? 'directo' : 'ocr-pendiente',
+        };
+      }
+    } else if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) {
+      const blob = await response.blob();
+      const file = new File([blob], doc.nombre, { type: doc.tipo_mime || 'image/jpeg' });
+      const ocrText = await extraerTextoDeArchivo(file);
+      return {
+        nombre: doc.nombre,
+        extension: ext,
+        contenido: ocrText.substring(0, MAX_DOC_CHARS) || '[No se pudo extraer texto de la imagen.]',
+        metodo: ocrText ? 'directo' : 'ocr-pendiente',
+      };
+    } else if (['doc', 'docx', 'xls', 'xlsx'].includes(ext)) {
+      const text = await extractOfficeText(await response.blob(), ext);
+      return {
+        nombre: doc.nombre,
+        extension: ext,
+        contenido: text.substring(0, MAX_DOC_CHARS),
+        metodo: text ? 'directo' : 'binario',
+      };
+    } else {
+      return {
+        nombre: doc.nombre,
+        extension: ext,
+        contenido: `[Formato ${ext} no procesable automáticamente. Documento disponible para descarga.]`,
+        metodo: 'binario',
+      };
+    }
+  } catch {
+    return {
+      nombre: doc.nombre,
+      extension: ext,
+      contenido: '[Error al procesar el archivo]',
+      metodo: 'error',
+    };
+  }
+}
+
+export async function getExpedienteDocumentos(expedienteId: string): Promise<Documento[]> {
+  const { data } = await supabase
+    .from('documentos')
+    .select('*')
+    .eq('expediente_id', expedienteId)
+    .order('created_at', { ascending: false });
+  return (data || []) as Documento[];
 }
 
 async function extractPdfText(blob: Blob): Promise<string | null> {

@@ -21,7 +21,7 @@ export default function Comentarios({ expedienteId, isAdmin }: ComentariosProps)
     setLoading(true);
     const { data, error } = await supabase
       .from('comentarios')
-      .select('*, autor:profiles!comentarios_autor_id_fkey(*)')
+      .select('*, autor:profiles!comentarios_autor_id_profiles_fkey(*)')
       .eq('expediente_id', expedienteId)
       .order('created_at', { ascending: true });
     if (error) {
