@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
+import { getAppSettings, updateAppSetting } from '../../lib/helpers';
 import type { ConfigCategoria, ConfigEstado, ConfigTipoActuacion } from '../../types';
 
 type ConfigTab = 'categorias' | 'estados' | 'tipos';
@@ -11,6 +12,9 @@ export default function AdminConfig() {
   const [tipos, setTipos] = useState<ConfigTipoActuacion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [googleDriveUrl, setGoogleDriveUrl] = useState('');
+  const [savingDriveUrl, setSavingDriveUrl] = useState(false);
+  const [driveSaved, setDriveSaved] = useState(false);
 
   // New item forms
   const [newCat, setNewCat] = useState({ nombre: '', descripcion: '' });
@@ -19,11 +23,13 @@ export default function AdminConfig() {
 
   const loadConfig = useCallback(async () => {
     setLoading(true);
-    const [catRes, estRes, tipoRes] = await Promise.all([
+    const [catRes, estRes, tipoRes, settings] = await Promise.all([
       supabase.from('config_categorias').select('*').order('orden'),
       supabase.from('config_estados').select('*').order('orden'),
       supabase.from('config_tipos_actuacion').select('*').order('orden'),
+      getAppSettings(),
     ]);
+    setGoogleDriveUrl(settings.google_drive_url || '');
     if (catRes.data) setCategorias(catRes.data as ConfigCategoria[]);
     if (estRes.data) setEstados(estRes.data as ConfigEstado[]);
     if (tipoRes.data) setTipos(tipoRes.data as ConfigTipoActuacion[]);
@@ -84,6 +90,44 @@ export default function AdminConfig() {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+
+      <div className="config-section drive-config-section">
+        <h3>Respaldo administrativo</h3>
+        <p className="form-hint">El enlace se muestra únicamente a administradores autenticados.</p>
+        <div className="inline-form">
+          <input
+            type="url"
+            value={googleDriveUrl}
+            onChange={(event) => { setGoogleDriveUrl(event.target.value); setDriveSaved(false); }}
+            placeholder="https://drive.google.com/..."
+            aria-label="Enlace de Google Drive"
+          />
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={savingDriveUrl}
+            onClick={async () => {
+              try {
+                if (googleDriveUrl && !/^https:\/\/drive\.google\.com\//i.test(googleDriveUrl)) {
+                  setError('Ingrese un enlace válido de Google Drive.');
+                  return;
+                }
+                setSavingDriveUrl(true);
+                const saved = await updateAppSetting('google_drive_url', googleDriveUrl.trim());
+                if (!saved) throw new Error('No se pudo guardar el enlace.');
+                setDriveSaved(true);
+                setError(null);
+              } catch {
+                setError('No se pudo guardar el enlace de Google Drive.');
+              } finally {
+                setSavingDriveUrl(false);
+              }
+            }}
+          >
+            {savingDriveUrl ? 'Guardando…' : 'Guardar enlace'}
+          </button>
+          {driveSaved && <span className="badge badge-green">Guardado</span>}
+        </div>
+      </div>
 
       <div className="config-tabs">
         <button className={tab === 'categorias' ? 'active' : ''} onClick={() => setTab('categorias')}>Categorías</button>

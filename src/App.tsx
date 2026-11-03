@@ -65,6 +65,17 @@ export default function App() {
         <div className="header-user">
           <span className="user-name">{profile.nombre_completo}</span>
           <span className={`user-role badge ${isAdmin ? 'badge-gold' : 'badge-blue'}`}>{profile.rol}</span>
+          {isAdmin && settings.google_drive_url && (
+            <a
+              href={settings.google_drive_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary btn-sm"
+              title="Abrir respaldo administrativo en Google Drive"
+            >
+              Google Drive
+            </a>
+          )}
           {whatsappEnabled && (
             <a
               href={`https://wa.me/${whatsappNumber}?text=Hola%2C%20me%20gustar%C3%ADa%20contactar%20con%20LexaCaso`}

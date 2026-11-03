@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getAppSettings, logAuditoria } from '../../lib/helpers';
 import { runAI } from '../../lib/ai';
-import { extractExpedienteDocumentText, buildContextWithDocuments } from '../../lib/document-extract';
-import type { AnalisisJuridico } from '../../types';
+import { extractSingleDocument, getExpedienteDocumentos, buildContextWithDocuments } from '../../lib/document-extract';
+import type { AnalisisJuridico, Documento } from '../../types';
 
 interface HerramientasJuridicasProps {
   expedienteId: string;
@@ -46,13 +46,20 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
   const [error, setError] = useState<string | null>(null);
   const [docContext, setDocContext] = useState<string>('');
   const [loadingDocs, setLoadingDocs] = useState(false);
+  const [documentos, setDocumentos] = useState<Documento[]>([]);
+  const [selectedDocumentId, setSelectedDocumentId] = useState('');
 
   useEffect(() => {
     (async () => {
-      const s = await getAppSettings();
+      const [s, docs, analysisResult] = await Promise.all([
+        getAppSettings(),
+        getExpedienteDocumentos(expedienteId),
+        supabase.from('analisis_juridicos').select('*').eq('expediente_id', expedienteId).order('creado_en', { ascending: false }),
+      ]);
       setSettings(s);
-      const { data } = await supabase.from('analisis_juridicos').select('*').eq('expediente_id', expedienteId).order('creado_en', { ascending: false });
-      if (data) setAnalisis(data as AnalisisJuridico[]);
+      setDocumentos(docs);
+      setSelectedDocumentId(docs[0]?.id || '');
+      if (analysisResult.data) setAnalisis(analysisResult.data as AnalisisJuridico[]);
     })();
   }, [expedienteId]);
 
@@ -62,26 +69,37 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
   const isToolEnabled = (key: string) => settings[key] !== 'false';
 
   const loadDocumentContext = async (): Promise<string> => {
+    if (!selectedDocumentId) {
+      throw new Error('Seleccione el documento a analizar.');
+    }
+
     setLoadingDocs(true);
     try {
-      const { data: exp } = await supabase
+      const { data: exp, error: expError } = await supabase
         .from('expedientes')
         .select('titulo, descripcion, area_juridica, estado, pretensiones, actuaciones_previas, observaciones_adicionales')
         .eq('id', expedienteId)
-        .single();
+        .maybeSingle();
+      if (expError) throw new Error('No se pudo cargar el expediente.');
 
-      const { resumen } = await extractExpedienteDocumentText(expedienteId);
-      const context = buildContextWithDocuments(exp, resumen);
+      const selectedDocument = documentos.find((documento) => documento.id === selectedDocumentId);
+      if (!selectedDocument) throw new Error('El documento seleccionado ya no está disponible.');
+
+      const extracted = await extractSingleDocument(selectedDocument);
+      const documentText = `--- Documento seleccionado: ${extracted.nombre} ---\n${extracted.contenido}`;
+      const context = buildContextWithDocuments(exp, documentText);
       setDocContext(context);
       return context;
-    } catch {
-      return '';
     } finally {
       setLoadingDocs(false);
     }
   };
 
   const handleRunTool = async (tool: ToolDef) => {
+    if (!selectedDocumentId) {
+      setError('Seleccione el documento a analizar antes de ejecutar una herramienta.');
+      return;
+    }
     setRunning(true);
     setError(null);
     try {
@@ -108,6 +126,10 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
   };
 
   const handleOpenManual = async (tool: ToolDef) => {
+    if (!selectedDocumentId) {
+      setError('Seleccione el documento a analizar antes de abrir el análisis manual.');
+      return;
+    }
     setEditingTool(tool);
     setEditTitulo(tool.label);
     setError(null);
@@ -157,8 +179,24 @@ export default function HerramientasJuridicas({ expedienteId, expedienteTitulo, 
     <div className="herramientas-juridicas">
       {error && <div className="alert alert-error">{error}<button className="alert-close" onClick={() => setError(null)}>×</button></div>}
 
+      <div className="form-group document-selector">
+        <label htmlFor="documento-ia">Seleccione el documento a analizar</label>
+        <select
+          id="documento-ia"
+          value={selectedDocumentId}
+          onChange={(event) => setSelectedDocumentId(event.target.value)}
+          disabled={running || loadingDocs || documentos.length === 0}
+        >
+          <option value="">Seleccione el documento a analizar</option>
+          {documentos.map((documento) => (
+            <option key={documento.id} value={documento.id}>{documento.nombre}</option>
+          ))}
+        </select>
+        {documentos.length === 0 && <span className="form-hint">Este expediente no tiene documentos disponibles.</span>}
+      </div>
+
       {loadingDocs && (
-        <div className="alert alert-info">Leyendo documentos del expediente…</div>
+        <div className="alert alert-info">Leyendo el documento seleccionado…</div>
       )}
 
       <div className="tools-grid">
