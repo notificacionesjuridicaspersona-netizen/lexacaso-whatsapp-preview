@@ -1,4 +1,4 @@
-import { GEMINI_CONFIG, getGeminiEndpoint } from './supabase';
+import { GEMINI_CONFIG } from './supabase';
 
 export interface GeminiResponse {
   content: string;
@@ -8,11 +8,17 @@ export interface GeminiResponse {
 interface GeminiModel {
   name?: string;
   baseModelId?: string;
-  supportedGenerationMethods?: string[];
 }
 
 interface GeminiModelsResponse {
   models?: GeminiModel[];
+}
+
+interface GeminiInteractionResponse {
+  output_text?: string;
+  steps?: Array<{
+    content?: Array<{ type?: string; text?: string }>;
+  }>;
 }
 
 export function isAIConfigured(): boolean {
@@ -44,34 +50,55 @@ Indica una ruta jurídica precisa, paso a paso, con documentos necesarios, actua
 
 No inventes hechos, normas, sentencias, fechas ni fuentes. Cuando falte información, escribe “pendiente de verificación”.`;
 
-async function getAvailableGenerationModel(): Promise<string | null> {
+function getInteractionsEndpoint(): string {
+  return `${GEMINI_CONFIG.apiBaseUrl}/interactions`;
+}
+
+async function getAvailableModel(): Promise<string | null> {
   const response = await fetch(`${GEMINI_CONFIG.apiBaseUrl}/models?key=${GEMINI_CONFIG.apiKey}`);
   if (!response.ok) return null;
 
   const data = await response.json() as GeminiModelsResponse;
-  const models = (data.models || []).filter((model) => model.supportedGenerationMethods?.includes('generateContent'));
   const preferredIds = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
 
   for (const preferredId of preferredIds) {
-    const match = models.find((model) => model.baseModelId === preferredId || model.name === `models/${preferredId}`);
+    const match = (data.models || []).find((model) => (
+      model.baseModelId === preferredId || model.name === `models/${preferredId}`
+    ));
     if (match?.name) return match.name.replace(/^models\//, '');
   }
 
-  const firstModel = models.find((model) => model.name?.startsWith('models/gemini-'));
-  return firstModel?.name?.replace(/^models\//, '') || null;
+  return null;
 }
 
-async function requestGemini(model: string, fullPrompt: string): Promise<Response> {
-  return fetch(getGeminiEndpoint(model), {
+async function requestInteraction(model: string, input: string): Promise<Response> {
+  return fetch(getInteractionsEndpoint(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'x-goog-api-key': GEMINI_CONFIG.apiKey,
     },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: fullPrompt }] }],
-      generationConfig: GEMINI_CONFIG.generationConfig,
+      model,
+      system_instruction: SYSTEM_PROMPT,
+      input,
+      generation_config: {
+        temperature: GEMINI_CONFIG.generationConfig.temperature,
+        max_output_tokens: GEMINI_CONFIG.generationConfig.maxOutputTokens,
+      },
     }),
   });
+}
+
+function getInteractionText(data: GeminiInteractionResponse): string {
+  if (data.output_text?.trim()) return data.output_text.trim();
+
+  return (data.steps || [])
+    .flatMap((step) => step.content || [])
+    .filter((content) => content.type === 'text' && content.text)
+    .map((content) => content.text as string)
+    .join('\n')
+    .trim();
 }
 
 export async function callGemini(prompt: string, context?: string): Promise<GeminiResponse> {
@@ -83,18 +110,18 @@ export async function callGemini(prompt: string, context?: string): Promise<Gemi
       };
     }
 
-    const fullPrompt = context
-      ? `${SYSTEM_PROMPT}\n\n--- CONTEXTO DEL EXPEDIENTE ---\n${context}\n\n--- CONSULTA ---\n${prompt}`
-      : `${SYSTEM_PROMPT}\n\n--- CONSULTA ---\n${prompt}`;
+    const input = context
+      ? `--- CONTEXTO DEL EXPEDIENTE ---\n${context}\n\n--- CONSULTA ---\n${prompt}`
+      : prompt;
 
     let model = GEMINI_CONFIG.model;
-    let response = await requestGemini(model, fullPrompt);
+    let response = await requestInteraction(model, input);
 
     if (response.status === 404) {
-      const availableModel = await getAvailableGenerationModel();
+      const availableModel = await getAvailableModel();
       if (availableModel && availableModel !== model) {
         model = availableModel;
-        response = await requestGemini(model, fullPrompt);
+        response = await requestInteraction(model, input);
       }
     }
 
@@ -102,18 +129,15 @@ export async function callGemini(prompt: string, context?: string): Promise<Gemi
       const errorData = await response.json().catch(() => ({}));
       return {
         content: '',
-        error: `Gemini no pudo procesar el análisis (${response.status}). Verifique que la clave tenga un modelo compatible habilitado. ${JSON.stringify(errorData)}`,
+        error: `Gemini no pudo procesar el análisis (${response.status}). Verifique que la clave tenga acceso a un modelo Gemini vigente. ${JSON.stringify(errorData)}`,
       };
     }
 
-    const data = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const data = await response.json() as GeminiInteractionResponse;
+    const content = getInteractionText(data);
+    if (!content) return { content: '', error: 'Gemini devolvió una respuesta vacía.' };
 
-    if (!candidateText) {
-      return { content: '', error: 'Gemini devolvió una respuesta vacía.' };
-    }
-
-    return { content: candidateText };
+    return { content };
   } catch (error) {
     return {
       content: '',
