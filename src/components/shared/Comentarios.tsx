@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { logAuditoria } from '../../lib/helpers';
+import { logAuditoria, sendEmailNotification } from '../../lib/helpers';
 import type { Comentario } from '../../types';
 
 interface ComentariosProps {
@@ -58,6 +58,26 @@ export default function Comentarios({ expedienteId, isAdmin }: ComentariosProps)
     }
 
     await logAuditoria('crear_comentario', `Comentario en expediente`, 'comentario', null);
+
+    if (isAdmin && visibilidad === 'cliente') {
+      const { data: expediente } = await supabase
+        .from('expedientes')
+        .select('titulo, profiles!expedientes_user_id_profiles_fkey(email, nombre_completo)')
+        .eq('id', expedienteId)
+        .maybeSingle();
+
+      const recipient = Array.isArray(expediente?.profiles) ? expediente.profiles[0] : expediente?.profiles;
+      if (recipient?.email) {
+        const appUrl = window.location.origin;
+        const sent = await sendEmailNotification(
+          recipient.email,
+          `Nuevo comentario en su expediente: ${expediente.titulo}`,
+          `Hola ${recipient.nombre_completo || ''},\n\nEl equipo de LexaCaso dejó un nuevo comentario en su expediente “${expediente.titulo}”.\n\nRevíselo ingresando a LexaCaso:\n${appUrl}\n\nEste mensaje fue enviado automáticamente.`,
+        );
+        if (!sent) setError('Comentario guardado, pero no se pudo enviar la notificación por correo.');
+      }
+    }
+
     setNewComentario('');
     loadComentarios();
   };

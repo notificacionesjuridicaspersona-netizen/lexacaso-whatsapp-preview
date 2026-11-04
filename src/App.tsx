@@ -80,7 +80,7 @@ export default function App() {
               className="btn btn-secondary btn-sm"
               title="Abrir respaldo administrativo en Google Drive"
             >
-              Google Drive
+              Base de datos Drive / Excel
             </a>
           )}
           {whatsappEnabled && (

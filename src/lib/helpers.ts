@@ -36,13 +36,14 @@ export async function updateAppSetting(clave: string, valor: string): Promise<bo
   }
 }
 
-export async function logAuditoria(accion: string, detalle: string, modulo: string, usuarioId?: string | null): Promise<void> {
+export async function logAuditoria(accion: string, detalle: string, entidad: string, entidadId?: string | null): Promise<void> {
   try {
-    await supabase.from('auditoria').insert({
+    await supabase.from('bitacora_auditoria').insert({
+      autor_id: (await supabase.auth.getUser()).data.user?.id || null,
       accion,
       detalle,
-      modulo,
-      usuario_id: usuarioId || null,
+      entidad,
+      entidad_id: entidadId || null,
     });
   } catch {
     // Error silencioso en auditoría para no interrumpir el flujo
@@ -167,6 +168,17 @@ export async function sendNotification(destinatario: string, evento: string, men
     });
   } catch {
     // Error silencioso
+  }
+}
+
+export async function sendEmailNotification(to: string, subject: string, message: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.functions.invoke('send-notification', {
+      body: { to, subject, message },
+    });
+    return !error;
+  } catch {
+    return false;
   }
 }
 
