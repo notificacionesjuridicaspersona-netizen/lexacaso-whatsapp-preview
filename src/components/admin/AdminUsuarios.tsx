@@ -11,7 +11,6 @@ export default function AdminUsuarios() {
   const [search, setSearch] = useState('');
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [editForm, setEditForm] = useState<Partial<Profile>>({});
-  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, string | null>>({});
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   const loadUsuarios = useCallback(async () => {
@@ -64,14 +63,6 @@ export default function AdminUsuarios() {
     await logAuditoria('editar_usuario', `Usuario: ${editingUser.email}`, 'perfil', editingUser.id);
     setEditingUser(null);
     loadUsuarios();
-  };
-
-  const handleRevealPassword = async (userId: string) => {
-    if (revealedPasswords[userId] !== undefined) {
-      setRevealedPasswords({ ...revealedPasswords, [userId]: null });
-      return;
-    }
-    setRevealedPasswords({ ...revealedPasswords, [userId]: '••••••' });
   };
 
   const handleDeleteUser = async (userId: string) => {
@@ -144,7 +135,6 @@ export default function AdminUsuarios() {
                 <th>Celular</th>
                 <th>Rol</th>
                 <th>Registro</th>
-                <th>Contraseña</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -160,20 +150,25 @@ export default function AdminUsuarios() {
                   </td>
                   <td>{new Date(u.created_at).toLocaleDateString('es-CO')}</td>
                   <td>
-                    <button
-                      className="btn-icon"
-                      title={revealedPasswords[u.id] !== null && revealedPasswords[u.id] !== undefined ? 'Ocultar' : 'Mostrar contraseña'}
-                      onClick={() => handleRevealPassword(u.id)}
-                    >
-                      {revealedPasswords[u.id] !== null && revealedPasswords[u.id] !== undefined ? '◉' : '◌'}
-                    </button>
-                    {revealedPasswords[u.id] !== null && revealedPasswords[u.id] !== undefined && (
-                      <span className="password-display">N/A</span>
-                    )}
-                  </td>
-                  <td>
                     <div className="row-actions">
                       <button className="btn-icon" onClick={() => { setEditingUser(u); setEditForm(u); }}>Editar</button>
+                      <button
+                        className="btn-icon"
+                        title="Enviar enlace seguro de restablecimiento"
+                        onClick={async () => {
+                          const { error: resetError } = await supabase.auth.resetPasswordForEmail(u.email, {
+                            redirectTo: window.location.origin,
+                          });
+                          if (resetError) {
+                            setError('No se pudo enviar el enlace de restablecimiento.');
+                          } else {
+                            setError(null);
+                            alert('Si la cuenta está activa, recibirá un enlace seguro en su correo.');
+                          }
+                        }}
+                      >
+                        Restablecer acceso
+                      </button>
                       {u.rol !== 'admin' && (
                         <button
                           className="btn-icon btn-danger"
@@ -226,8 +221,8 @@ export default function AdminUsuarios() {
               </select>
             </div>
             <div className="form-group">
-              <label>Restablecer contraseña</label>
-              <p className="form-hint">El usuario puede restablecer su contraseña desde la pantalla de inicio de sesión ("¿Olvidó su contraseña?").</p>
+              <label>Restablecer acceso</label>
+              <p className="form-hint">Por seguridad, las contraseñas nunca son visibles. Puede enviar un enlace para que el usuario cree una nueva.</p>
               <button
                 className="btn btn-secondary btn-sm"
                 type="button"
@@ -236,14 +231,14 @@ export default function AdminUsuarios() {
                     redirectTo: window.location.origin,
                   });
                   if (resetError) {
-                    setError(resetError.message);
+                    setError('No se pudo enviar el enlace de restablecimiento.');
                   } else {
                     setError(null);
-                    alert(`Se ha enviado un enlace de restablecimiento a ${editingUser.email}`);
+                    alert('Si la cuenta está activa, recibirá un enlace seguro en su correo.');
                   }
                 }}
               >
-                Enviar enlace de restablecimiento
+                Enviar enlace seguro
               </button>
             </div>
             <div className="form-actions">

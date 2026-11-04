@@ -5,15 +5,6 @@ export interface GeminiResponse {
   error?: string;
 }
 
-interface GeminiModel {
-  name?: string;
-  baseModelId?: string;
-}
-
-interface GeminiModelsResponse {
-  models?: GeminiModel[];
-}
-
 interface GeminiInteractionResponse {
   output_text?: string;
   steps?: Array<{
@@ -52,23 +43,6 @@ No inventes hechos, normas, sentencias, fechas ni fuentes. Cuando falte informac
 
 function getInteractionsEndpoint(): string {
   return `${GEMINI_CONFIG.apiBaseUrl}/interactions`;
-}
-
-async function getAvailableModel(): Promise<string | null> {
-  const response = await fetch(`${GEMINI_CONFIG.apiBaseUrl}/models?key=${GEMINI_CONFIG.apiKey}`);
-  if (!response.ok) return null;
-
-  const data = await response.json() as GeminiModelsResponse;
-  const preferredIds = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
-
-  for (const preferredId of preferredIds) {
-    const match = (data.models || []).find((model) => (
-      model.baseModelId === preferredId || model.name === `models/${preferredId}`
-    ));
-    if (match?.name) return match.name.replace(/^models\//, '');
-  }
-
-  return null;
 }
 
 async function requestInteraction(model: string, input: string): Promise<Response> {
@@ -114,23 +88,19 @@ export async function callGemini(prompt: string, context?: string): Promise<Gemi
       ? `--- CONTEXTO DEL EXPEDIENTE ---\n${context}\n\n--- CONSULTA ---\n${prompt}`
       : prompt;
 
-    let model = GEMINI_CONFIG.model;
-    let response = await requestInteraction(model, input);
+    const modelsToTry = [GEMINI_CONFIG.model, 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+    let response: Response | null = null;
 
-    if (response.status === 404) {
-      const availableModel = await getAvailableModel();
-      if (availableModel && availableModel !== model) {
-        model = availableModel;
-        response = await requestInteraction(model, input);
-      }
+    for (const model of modelsToTry) {
+      response = await requestInteraction(model, input);
+      if (response.ok) break;
     }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return {
-        content: '',
-        error: `Gemini no pudo procesar el análisis (${response.status}). Verifique que la clave tenga acceso a un modelo Gemini vigente. ${JSON.stringify(errorData)}`,
-      };
+    if (!response?.ok) {
+      if (response?.status === 503) {
+        return { content: '', error: 'El servicio de Gemini está temporalmente saturado. Espere unos segundos y vuelva a intentarlo.' };
+      }
+      return { content: '', error: 'Gemini no pudo procesar el análisis. Intente nuevamente o revise el acceso de la clave al servicio.' };
     }
 
     const data = await response.json() as GeminiInteractionResponse;

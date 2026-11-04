@@ -126,6 +126,11 @@ export default function AdminConfig() {
             {savingDriveUrl ? 'Guardando…' : 'Guardar enlace'}
           </button>
           {driveSaved && <span className="badge badge-green">Guardado</span>}
+          {googleDriveUrl && (
+            <a className="btn btn-secondary btn-sm" href={googleDriveUrl} target="_blank" rel="noopener noreferrer">
+              Abrir Drive administrativo
+            </a>
+          )}
         </div>
       </div>
 

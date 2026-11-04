@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './context/AuthContext';
 import LandingPage from './components/landing/LandingPage';
+import AuthPage from './components/auth/AuthPage';
 import AdminDashboard from './components/admin/AdminDashboard';
 import AdminExpedientes from './components/admin/AdminExpedientes';
 import AdminUsuarios from './components/admin/AdminUsuarios';
@@ -42,6 +43,12 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  const isPasswordRecovery = window.location.hash.includes('type=recovery');
+
+  if (isPasswordRecovery) {
+    return <AuthPage recoveryMode />;
   }
 
   if (!profile) {

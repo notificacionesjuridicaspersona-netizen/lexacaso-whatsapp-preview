@@ -2,12 +2,18 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getAppSettings } from '../../lib/helpers';
 
-type Mode = 'login' | 'register' | 'recover';
+type Mode = 'login' | 'register' | 'recover' | 'update';
 
-export default function AuthPage() {
-  const [mode, setMode] = useState<Mode>('login');
+interface AuthPageProps {
+  recoveryMode?: boolean;
+  initialMode?: 'login' | 'register' | 'recover';
+}
+
+export default function AuthPage({ recoveryMode = false, initialMode = 'login' }: AuthPageProps) {
+  const [mode, setMode] = useState<Mode>(recoveryMode ? 'update' : initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [nombreCompleto, setNombreCompleto] = useState('');
   const [cedula, setCedula] = useState('');
@@ -77,17 +83,31 @@ export default function AuthPage() {
           setPassword('');
         }
       } else if (mode === 'recover') {
-        const { error: recoverError } = await supabase.auth.resetPasswordForEmail(email, {
+        await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: window.location.origin,
         });
-        if (recoverError) {
-          setError(recoverError.message);
+        setSuccess('Si el correo está registrado, recibirá un enlace para recuperar el acceso.');
+      } else if (mode === 'update') {
+        if (password.length < 6) {
+          setError('La nueva contraseña debe tener al menos 6 caracteres.');
+        } else if (password !== confirmPassword) {
+          setError('Las contraseñas no coinciden.');
         } else {
-          setSuccess('Se ha enviado un enlace de recuperación a su correo.');
+          const { error: updateError } = await supabase.auth.updateUser({ password });
+          if (updateError) {
+            setError('No se pudo actualizar la contraseña. Solicite un nuevo enlace.');
+          } else {
+            await supabase.auth.signOut();
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setPassword('');
+            setConfirmPassword('');
+            setMode('login');
+            setSuccess('Contraseña actualizada. Ya puede iniciar sesión.');
+          }
         }
       }
-    } catch (e) {
-      setError((e as Error).message);
+    } catch {
+      setError('No se pudo completar la solicitud. Intente nuevamente.');
     } finally {
       setLoading(false);
     }
@@ -118,23 +138,26 @@ export default function AuthPage() {
             {mode === 'login' && 'Iniciar Sesión'}
             {mode === 'register' && 'Crear Cuenta'}
             {mode === 'recover' && 'Recuperar Contraseña'}
+            {mode === 'update' && 'Crear nueva contraseña'}
           </h2>
 
           {error && <div className="alert alert-error">{error}</div>}
           {success && <div className="alert alert-success">{success}</div>}
 
           <form onSubmit={handleSubmit} className="auth-form">
-            <div className="form-group">
-              <label htmlFor="email">Correo electrónico</label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="su@email.com"
-              />
-            </div>
+            {mode !== 'update' && (
+              <div className="form-group">
+                <label htmlFor="email">Correo electrónico</label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  placeholder="su@email.com"
+                />
+              </div>
+            )}
 
             {mode === 'register' && (
               <>
@@ -224,11 +247,27 @@ export default function AuthPage() {
               </div>
             )}
 
+            {mode === 'update' && (
+              <div className="form-group">
+                <label htmlFor="confirm-password">Confirmar nueva contraseña</label>
+                <input
+                  id="confirm-password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  placeholder="Repita la nueva contraseña"
+                />
+              </div>
+            )}
+
             <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
               {loading ? 'Procesando…' : (
                 mode === 'login' ? 'Ingresar' :
                 mode === 'register' ? 'Registrarse' :
-                'Enviar enlace'
+                mode === 'recover' ? 'Enviar enlace' :
+                'Guardar nueva contraseña'
               )}
             </button>
           </form>
@@ -240,7 +279,7 @@ export default function AuthPage() {
                   ¿No tiene cuenta? Regístrese
                 </button>
                 <button className="link-btn" onClick={() => { setMode('recover'); setError(null); setSuccess(null); }}>
-                  ¿Olvidó su contraseña?
+                  Recuperar acceso de cliente o administrador
                 </button>
               </>
             )}
@@ -253,6 +292,9 @@ export default function AuthPage() {
               <button className="link-btn" onClick={() => { setMode('login'); setError(null); setSuccess(null); }}>
                 Volver a iniciar sesión
               </button>
+            )}
+            {mode === 'update' && (
+              <p className="form-hint">Use una contraseña que no haya compartido con otras personas.</p>
             )}
           </div>
         </div>
