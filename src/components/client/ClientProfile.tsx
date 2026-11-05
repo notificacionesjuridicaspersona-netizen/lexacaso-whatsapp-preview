@@ -19,6 +19,7 @@ export default function ClientProfile() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPass, setChangingPass] = useState(false);
+  const [showPasswords, setShowPasswords] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
@@ -137,11 +138,31 @@ export default function ClientProfile() {
           <h3>Cambiar contraseña</h3>
           <div className="form-group">
             <label>Nueva contraseña</label>
-            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+            <div className="password-input-wrapper">
+              <input type={showPasswords ? 'text' : 'password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPasswords(!showPasswords)}
+                title={showPasswords ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              >
+                {showPasswords ? '◉' : '◌'}
+              </button>
+            </div>
           </div>
           <div className="form-group">
             <label>Confirmar contraseña</label>
-            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+            <div className="password-input-wrapper">
+              <input type={showPasswords ? 'text' : 'password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPasswords(!showPasswords)}
+                title={showPasswords ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              >
+                {showPasswords ? '◉' : '◌'}
+              </button>
+            </div>
           </div>
           <button className="btn btn-primary btn-sm" onClick={handleChangePassword} disabled={changingPass}>
             {changingPass ? 'Cambiando…' : 'Cambiar contraseña'}
