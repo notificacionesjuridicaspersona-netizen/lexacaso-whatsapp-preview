@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getAppSettings } from '../../lib/helpers';
+import { useAuth } from '../../context/AuthContext';
 
 type Mode = 'login' | 'register' | 'recover' | 'update';
 
@@ -25,6 +26,7 @@ export default function AuthPage({ recoveryMode = false, initialMode = 'login' }
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState<Record<string, string>>({});
+  const { clearPasswordRecovery } = useAuth();
 
   useEffect(() => {
     (async () => {
@@ -98,6 +100,7 @@ export default function AuthPage({ recoveryMode = false, initialMode = 'login' }
             setError('No se pudo actualizar la contraseña. Solicite un nuevo enlace.');
           } else {
             await supabase.auth.signOut();
+            clearPasswordRecovery();
             window.history.replaceState({}, document.title, window.location.pathname);
             setPassword('');
             setConfirmPassword('');

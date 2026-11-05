@@ -20,7 +20,7 @@ type AdminTab = 'dashboard' | 'expedientes' | 'usuarios' | 'config' | 'bitacora'
 type ClientTab = 'dashboard' | 'documentos' | 'perfil';
 
 export default function App() {
-  const { profile, loading, signOut } = useAuth();
+  const { profile, loading, signOut, passwordRecovery } = useAuth();
   const [adminTab, setAdminTab] = useState<AdminTab>('dashboard');
   const [clientTab, setClientTab] = useState<ClientTab>('dashboard');
   const [showExponer, setShowExponer] = useState(false);
@@ -45,9 +45,7 @@ export default function App() {
     );
   }
 
-  const isPasswordRecovery = window.location.hash.includes('type=recovery');
-
-  if (isPasswordRecovery) {
+  if (passwordRecovery) {
     return <AuthPage recoveryMode />;
   }
 
